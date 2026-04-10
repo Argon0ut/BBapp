@@ -1,38 +1,39 @@
-from src.models.hairstyle_preview_request import HairstylePreviewRequest
-from src.db import db
-from src.utils.repository import PlainRepository
+from copy import deepcopy
+from datetime import datetime, timezone
+
+_preview_requests: list[dict] = []
 
 
-class HairstylePreviewRepository(PlainRepository):
+class HairstylePreviewRepository:
+    async def add(self, request: dict):
+        _preview_requests.append(request)
+        return deepcopy(request)
 
-    async def add(self, client_id: int, request: HairstylePreviewRequest):
-        db.TuningRequests.append(request)
-        return request
-
-    async def get(self, request_id : int):
-        result = None
-        for request in db.TuningRequests:
-            if request.id == request_id:
-                result = request
-                break
-        return result
-
-    async def update(self, request_id : int, request : HairstylePreviewRequest):
-        for elem in db.TuningRequests:
-            if elem.id == request_id:
-                elem = request
-                return elem
+    async def get(self, request_id: int):
+        for request in _preview_requests:
+            if request["id"] == request_id:
+                return deepcopy(request)
         return None
 
-    async def delete(self, request_id : int):
-        for i in range(len(db.TuningRequests)):
-            if db.TuningRequests[i].id == request_id:
-                request = db.TuningRequests[i].pop(i)
-                return request
+    async def update(self, request_id: int, updates: dict):
+        now = datetime.now(timezone.utc)
+        for request in _preview_requests:
+            if request["id"] == request_id:
+                request.update(updates)
+                request["updated_at"] = now
+                return deepcopy(request)
         return None
+
+    async def get_by_provider_request_id(self, provider_request_id: str):
+        for request in _preview_requests:
+            if request.get("provider_request_id") == provider_request_id:
+                return deepcopy(request)
+        return None
+
+    async def clear(self):
+        _preview_requests.clear()
 
     async def _next_id(self):
-        if not db.TuningRequests:
+        if not _preview_requests:
             return 0
-        else:
-            return db.TuningRequests[-1].id + 1
+        return _preview_requests[-1]["id"] + 1

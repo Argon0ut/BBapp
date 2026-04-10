@@ -3,8 +3,6 @@ from fastapi import UploadFile
 
 from src.repositories.client_photo_repository import ClientPhotosRepository
 from src.models.client_photos import ClientPhoto, ClientPhotoType
-from src.schemas.client_photos import ClientPhotoCompletenessSchema
-
 UPLOAD_DIR = 'uploads/client_photos'
 ALLOWED_TYPES = ['image/jpg', 'image/png', 'image/webp', 'image/jpeg']
 
@@ -25,7 +23,7 @@ class ClientPhotoService:
             raise Exception('File Type not allowed')
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        filename = f"client_{client_id}_{photo_type}.jpg"
+        filename = f"client_{client_id}_{photo_type.value}.jpg"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
         with open(file_path, 'wb') as f:
