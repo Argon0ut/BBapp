@@ -1,11 +1,11 @@
-from src.models.tuning_request import TuningRequest
+from src.models.hairstyle_preview_request import HairstylePreviewRequest
 from src.db import db
 from src.utils.repository import PlainRepository
 
 
-class TuningRepository(PlainRepository):
+class HairstylePreviewRepository(PlainRepository):
 
-    async def add(self, car_id : int, request : TuningRequest):
+    async def add(self, client_id: int, request: HairstylePreviewRequest):
         db.TuningRequests.append(request)
         return request
 
@@ -17,7 +17,7 @@ class TuningRepository(PlainRepository):
                 break
         return result
 
-    async def update(self, request_id : int, request : TuningRequest):
+    async def update(self, request_id : int, request : HairstylePreviewRequest):
         for elem in db.TuningRequests:
             if elem.id == request_id:
                 elem = request

@@ -14,13 +14,13 @@ def clean_db():
 
 #ASGI-level integration tests
 @pytest.mark.asyncio
-async def test_create_cars():
+async def test_create_clients():
     async with AsyncClient(
         transport = ASGITransport(app),
         base_url = 'http://testserver',
     ) as ac:
         response = await ac.post(
-            '/cars/create',
+            '/clients/create',
             json = {
                 "brand": "Toyota",
                 "model": "GR86",
@@ -41,16 +41,16 @@ async def test_patch_car_updates_only_given_fields():
         base_url = 'http://testserver',
     ) as ac:
         create = await ac.post(
-            '/cars/create',
+            '/clients/create',
             json={
                 "brand": "Toyota",
                 "model": "GR86",
                 "year": 2022
             })
-        car_id = create.json()['id']
+        client_id = create.json()['id']
 
         patch = await ac.patch(
-            f'/cars/{car_id}',
+            f'/clients/{client_id}',
             json={'brand' : 'Dodge'}
         )
 
@@ -62,12 +62,12 @@ async def test_patch_car_updates_only_given_fields():
     assert data["year"] == 2022
 
 #Contract(Schema) test
-async def test_create_car_response_contract():
+async def test_create_client_response_contract():
     async with AsyncClient(
         transport = ASGITransport(app),
         base_url = 'http://testserver',
     ) as ac:
-        response = await ac.post('/cars/create', json={
+        response = await ac.post('/clients/create', json={
             "brand": "Toyota",
             "model": "GT86",
             "year": 2021

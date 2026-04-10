@@ -1,22 +1,22 @@
-from src.repositories.car_repository import CarsRepository
-from src.services.car_service import CarsService
+from src.repositories.client_repository import ClientsRepository
+from src.services.client_service import ClientsService
 
-from src.repositories.car_image_repository import CarsImageRepository
-from src.services.car_image_service import CarImageService
+from src.repositories.client_photo_repository import ClientPhotosRepository
+from src.services.client_photo_service import ClientPhotoService
 
-from src.repositories.tuning_repository import TuningRepository
-from src.services.tuning_service import TuningService
+from src.repositories.hairstyle_preview_repository import HairstylePreviewRepository
+from src.services.hairstyle_preview_service import HairstylePreviewService
 
 
-def cars_service() -> CarsService:
-    repo = CarsRepository()
-    return CarsService(repo)
+def clients_service() -> ClientsService:
+    repo = ClientsRepository()
+    return ClientsService(repo)
 
-def car_image_service() -> CarImageService:
-    repo = CarsImageRepository()
-    return CarImageService(repo)
+def client_photo_service() -> ClientPhotoService:
+    repo = ClientPhotosRepository()
+    return ClientPhotoService(repo)
 
-def tuning_service() -> TuningService:
-    repo = TuningRepository()
-    images_service = car_image_service()
-    return TuningService(repo, images_service)
+def hairstyle_preview_service() -> HairstylePreviewService:
+    repo = HairstylePreviewRepository()
+    photos_service = client_photo_service()
+    return HairstylePreviewService(repo, photos_service)

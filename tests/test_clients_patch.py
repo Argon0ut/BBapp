@@ -1,9 +1,9 @@
 from httpx import AsyncClient, ASGITransport
 from src.main import app
 
-async def create_car(ac):
+async def create_client(ac):
     response = await ac.post(
-        '/cars/create',
+        '/clients/create',
         json = {
             'brand': 'Ford',
             'model': 'Mustang',
@@ -12,16 +12,16 @@ async def create_car(ac):
     )
     return response.json()
 
-async def test_patch_car_partial_update():
+async def test_patch_client_partial_update():
     async with AsyncClient(
         transport = ASGITransport(app = app),
         base_url = 'http://testserver',
     ) as ac:
-        car = await create_car(ac)
-        car_id = car['id']
+        client = await create_client(ac)
+        client_id = client['id']
 
         response = await ac.patch(
-            f'/cars/{car_id}',
+            f'/clients/{client_id}',
             json = {
                 'brand': 'Honda'
             }

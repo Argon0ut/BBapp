@@ -1,11 +1,9 @@
-from uuid import UUID
-
 from pydantic import BaseModel
 from typing import Optional
 
 
-class CarSchema(BaseModel):
-    id : int
+class ClientSchema(BaseModel):
+    id: int
     brand: str
     model: str
     year: int
@@ -15,26 +13,30 @@ class CarSchema(BaseModel):
     }
 
 
-class CarAddSchema(BaseModel):
+class ClientCreateSchema(BaseModel):
     brand: str
     model: str
     year: int
 
 
-class CarUpdateSchema(BaseModel): # PATCH based schema
+class ClientUpdateSchema(BaseModel):
     brand: Optional[str] = None
     model: Optional[str] = None
     year: Optional[int] = None
 
 
-class CarPutSchema(BaseModel):
+class ClientPutSchema(BaseModel):
     brand: str
     model: str
     year: int
 
 
-class CarResponseSchema(BaseModel):
-    id: UUID
+class ClientResponseSchema(BaseModel):
+    id: int
     brand: str
     model: str
     year: int
+
+    model_config = {
+        'from_attributes': True
+    }
