@@ -60,7 +60,7 @@ class ClientPhotoService:
         left = ClientPhotoType.LEFT in present
         right = ClientPhotoType.RIGHT in present
 
-        partially_complete = front and rear
+        partially_complete = bool(present)
         fully_complete = front and rear and left and right
 
         return {

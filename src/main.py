@@ -1,9 +1,21 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.api.clients import client_router
 from src.api.client_photos import router as client_photos_router
 from src.api.hairstyle_previews import router as hairstyle_previews_router
+from src.config import get_settings
 
 app = FastAPI()
+settings = get_settings()
+
+if settings.cors_allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/")

@@ -10,6 +10,11 @@ class Settings(BaseModel):
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     hf_image_model_id: str = os.getenv("HF_IMAGE_MODEL_ID", "higgsfield-ai/soul/standard")
     hf_timeout_seconds: float = float(os.getenv("HF_TIMEOUT_SECONDS", "30"))
+    cors_allowed_origins: list[str] = [
+        origin.strip().rstrip("/")
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
 
     @property
     def has_higgsfield_credentials(self) -> bool:

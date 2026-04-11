@@ -27,6 +27,7 @@ The backend needs these variables configured:
 - `HF_API_KEY`
 - `HF_SECRET_KEY`
 - `PUBLIC_BASE_URL`
+- `CORS_ALLOWED_ORIGINS`
 
 `PUBLIC_BASE_URL` must be the public URL of this backend, for example:
 
@@ -35,6 +36,14 @@ PUBLIC_BASE_URL=https://subpeltately-superstoical-shavonne.ngrok-free.dev/
 ```
 
 Without a valid public `PUBLIC_BASE_URL`, Higgsfield cannot call the webhook on this backend.
+
+For local frontend development, allow the frontend origin in CORS:
+
+```env
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
+If you later deploy the frontend separately, add its production origin too as a comma-separated list.
 
 ## Current frontend flow
 
@@ -98,7 +107,7 @@ Content-Type: multipart/form-data
 
 Recommended frontend behavior:
 
-- Upload at least `front` and `rear` before enabling image generation.
+- Upload at least one photo before enabling image generation.
 
 ### 3. Check photo completeness
 
@@ -123,7 +132,7 @@ Generation currently requires:
 
 - `partially_completed === true`
 
-That means at least `front` and `rear` are uploaded.
+That means at least one photo is uploaded.
 
 ## Hairstyle preview generation API
 
@@ -351,9 +360,8 @@ Show:
 
 1. `POST /clients/create`
 2. `POST /clients/{client_id}/photos?photo_type=front`
-3. `POST /clients/{client_id}/photos?photo_type=rear`
-4. `GET /clients/{client_id}/photos/status`
-5. `POST /hairstyle-previews`
+3. `GET /clients/{client_id}/photos/status`
+4. `POST /hairstyle-previews`
 6. Poll `GET /hairstyle-previews/{preview_id}`
 7. If satisfied: `POST /hairstyle-previews/{preview_id}/approve`
 8. If not satisfied: `POST /hairstyle-previews/{preview_id}/regenerate`
