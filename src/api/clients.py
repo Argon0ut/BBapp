@@ -56,3 +56,12 @@ async def delete_client(
     clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
 ):
     return await clients_service.delete_client(client_id)
+
+
+
+@client_router.delete('/{client_id}/ss', status_code=204)
+async def delete_clientssssssssss(
+    client_id: int,
+    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
+):
+    return await clients_service.delete_client(client_id)

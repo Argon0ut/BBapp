@@ -8,6 +8,7 @@ from src.config import get_settings
 app = FastAPI()
 settings = get_settings()
 
+
 if settings.cors_allowed_origins:
     app.add_middleware(
         CORSMiddleware,
