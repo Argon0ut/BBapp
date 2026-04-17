@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from src.api.auth import router as auth_router
 from src.api.clients import client_router
 from src.api.client_photos import router as client_photos_router
 from src.api.hairstyle_previews import router as hairstyle_previews_router
@@ -27,3 +28,4 @@ async def root():
 app.include_router(client_router)
 app.include_router(client_photos_router)
 app.include_router(hairstyle_previews_router)
+app.include_router(auth_router)

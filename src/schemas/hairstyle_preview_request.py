@@ -1,10 +1,11 @@
 from datetime import datetime
+
 from pydantic import BaseModel
 
 from src.models.hairstyle_preview_request import HairstylePreviewStatus
 
+
 class HairstylePreviewGenerateSchema(BaseModel):
-    client_id: int
     text_prompt: str
     aspect_ratio: str = "1:1"
     resolution: str = "720p"
@@ -18,7 +19,7 @@ class HairstylePreviewRegenerateSchema(BaseModel):
 
 class HairstylePreviewRequestSchema(BaseModel):
     id: int
-    client_id: int
+    user_id: int
     text_prompt: str
     status: HairstylePreviewStatus
     aspect_ratio: str

@@ -34,8 +34,8 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from src.db.db import Base
-from src.models.clients import Client
 from src.models.client_photos import ClientPhoto
+from src.models.auth import AuthSession, AuthUser
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

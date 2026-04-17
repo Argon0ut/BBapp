@@ -43,21 +43,21 @@ class HairstylePreviewService:
 
     async def create_preview(
         self,
-        client_id: int,
+        user_id: int,
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "720p",
     ):
-        status = await self.client_photo_service.get_status(client_id)
+        status = await self.client_photo_service.get_status(user_id)
 
         if not status['partially_completed']:
-            raise Exception("Client photos are not ready to be loaded to AI")
+            raise Exception("User photos are not ready to be loaded to AI")
 
         preview_id = await self.preview_repo._next_id()
         now = datetime.now(timezone.utc)
         request = {
             "id": preview_id,
-            "client_id": client_id,
+            "user_id": user_id,
             "text_prompt": prompt,
             "status": HairstylePreviewStatus.QUEUED,
             "aspect_ratio": aspect_ratio,

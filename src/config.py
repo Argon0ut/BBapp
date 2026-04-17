@@ -10,6 +10,8 @@ class Settings(BaseModel):
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     hf_image_model_id: str = os.getenv("HF_IMAGE_MODEL_ID", "higgsfield-ai/soul/standard")
     hf_timeout_seconds: float = float(os.getenv("HF_TIMEOUT_SECONDS", "30"))
+    session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
+    session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "session_token")
     cors_allowed_origins: list[str] = [
         origin.strip().rstrip("/")
         for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")

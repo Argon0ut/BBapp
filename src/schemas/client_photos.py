@@ -3,7 +3,7 @@ from src.models.client_photos import ClientPhotoType
 
 class ClientPhotoResponseSchema(BaseModel):
     id: int
-    client_id: int
+    user_id: int
     photo_type: ClientPhotoType
     file_path: str
 
@@ -22,4 +22,3 @@ class ClientPhotoCompletenessSchema(BaseModel):
 
 #Upload schema != response schema
 #Upload uses UploadFile, not pydantic
-

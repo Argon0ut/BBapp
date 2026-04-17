@@ -1,67 +1,74 @@
-from fastapi import APIRouter, Depends, HTTPException
-
-from src.schemas.clients import ClientCreateSchema, ClientUpdateSchema, ClientResponseSchema
-
 from typing import Annotated, List
 
-from src.services.client_service import ClientsService
-from src.api.dependencies import clients_service as clients_service_dependency
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.api.dependencies import (
+    get_current_user,
+    require_roles,
+    user_service as user_service_dependency,
+)
+from src.models.auth import AuthUser, UserRole
+from src.schemas.clients import UserResponseSchema, UserUpdateSchema
+from src.services.user_service import UserService
 
 client_router = APIRouter(
-    prefix='/clients',
-    tags=['Clients'],
+    prefix="/clients",
+    tags=["Users"],
 )
 
-@client_router.post('/create', response_model=ClientResponseSchema, status_code=201)
-async def create_client(
-    client: ClientCreateSchema,
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
+
+@client_router.get("", response_model=List[UserResponseSchema])
+async def get_all_users(
+    user_service: Annotated[UserService, Depends(user_service_dependency)],
+    current_user: Annotated[AuthUser, Depends(require_roles(UserRole.ADMIN))],
 ):
-    return await clients_service.add_client(client)
+    return await user_service.get_all_users()
 
 
-@client_router.get('', response_model=List[ClientResponseSchema])
-async def get_all_clients(
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
+@client_router.get("/{user_id}", response_model=UserResponseSchema)
+async def get_user(
+    user_id: int,
+    user_service: Annotated[UserService, Depends(user_service_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
 ):
-    return await clients_service.get_all_clients()
+    if current_user.role != UserRole.ADMIN.value and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        return await user_service.get_user(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="User not found")
 
 
-@client_router.get('/{client_id}', response_model=ClientResponseSchema)
-async def get_client(
-    client_id: int,
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
+@client_router.patch("/{user_id}", response_model=UserResponseSchema)
+async def update_user(
+    user_id: int,
+    data: UserUpdateSchema,
+    user_service: Annotated[UserService, Depends(user_service_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    if current_user.role != UserRole.ADMIN.value and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        return await user_service.update_user(user_id, data, current_user)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "User not found":
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+
+
+@client_router.delete("/{user_id}", status_code=204)
+async def delete_user(
+    user_id: int,
+    user_service: Annotated[UserService, Depends(user_service_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
 ):
     try:
-        return await clients_service.get_client(client_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail='Client not found')
-
-
-@client_router.patch('/{client_id}', response_model=ClientResponseSchema)
-async def update_client(
-    client_id: int,
-    data: ClientUpdateSchema,
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
-):
-    try:
-        return await clients_service.update_client(client_id, data)
-    except ValueError:
-        raise HTTPException(status_code=404, detail='Client not found')
-
-
-@client_router.delete('/{client_id}', status_code=204)
-async def delete_client(
-    client_id: int,
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
-):
-    return await clients_service.delete_client(client_id)
-
-
-
-@client_router.delete('/{client_id}/ss', status_code=204)
-async def delete_clientssssssssss(
-    client_id: int,
-    clients_service: Annotated[ClientsService, Depends(clients_service_dependency)],
-):
-    return await clients_service.delete_client(client_id)
+        await user_service.delete_user(user_id, current_user)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "User not found":
+            raise HTTPException(status_code=404, detail=message)
+        raise HTTPException(status_code=403, detail=message)
