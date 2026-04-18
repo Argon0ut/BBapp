@@ -184,9 +184,13 @@ async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
         "https://storage.example/front.jpg",
         "https://storage.example/right.jpg",
     ]
-    assert "Identity lock" in call["prompt"]
-    assert "ALL 2 attached photos" in call["prompt"]
-    assert call["prompt"].endswith("Hairstyle request: short bob haircut")
+    assert "Identity reference only" in call["prompt"]
+    assert "2 attached photos" in call["prompt"]
+    assert "front-facing head-and-shoulders portrait" in call["prompt"]
+    assert "Do NOT render the back or side of the head" in call["prompt"]
+    assert call["prompt"].endswith(
+        "New hairstyle to render on this person: short bob haircut"
+    )
 
 
 @pytest.mark.asyncio

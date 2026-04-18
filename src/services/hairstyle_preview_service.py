@@ -9,15 +9,18 @@ from src.services.higgsfield_client import HiggsfieldClient
 from src.services.image_storage_service import ImageStorageService
 
 IDENTITY_PROMPT_PREFIX = (
-    "Identity lock: treat EVERY attached reference photo as the SAME single real "
-    "person, captured from multiple angles (front, rear, left, right). Fuse facial "
-    "structure, skin tone, eye color, hairline and body proportions across ALL "
-    "{photo_count} attached photos as one consistent identity. Do not blend with "
-    "any other person, do not invent features that are not present in the reference "
-    "set, and do not drop photos from consideration. Render a new hairstyle while "
-    "preserving this exact identity."
+    "Identity reference only: the {photo_count} attached photos all depict the "
+    "SAME single real person. Use them ONLY to learn the subject's face, skin "
+    "tone, eye color and hairline. Do NOT copy their pose, framing, crop, camera "
+    "angle, or background. Do NOT render the back or side of the head. Do NOT "
+    "blend with any other person. Do NOT invent features absent from the "
+    "references.\n\n"
+    "Output requirement: generate exactly ONE photorealistic front-facing head-"
+    "and-shoulders portrait of this same person, eyes looking at the camera, "
+    "neutral studio background, even lighting, sharp focus on the face and hair. "
+    "The new hairstyle below must be clearly visible from the front."
 )
-USER_PROMPT_PREFIX = "Hairstyle request: "
+USER_PROMPT_PREFIX = "New hairstyle to render on this person: "
 
 
 class HairstylePreviewService:
