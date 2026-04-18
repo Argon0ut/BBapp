@@ -6,10 +6,17 @@ from src.config import Settings
 
 
 class HiggsfieldClient:
-    base_url = "https://api.higgsfield.ai"
+    base_url = "https://platform.higgsfield.ai"
 
     def __init__(self, settings: Settings):
         self.settings = settings
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": self.settings.authorization_header,
+            "Accept": "application/json",
+        }
 
     async def generate_image(
         self,
@@ -22,21 +29,19 @@ class HiggsfieldClient:
             raise ValueError("Higgsfield credentials are not configured")
 
         payload: dict[str, Any] = {
-            "model": self.settings.hf_image_model_id,
             "prompt": prompt,
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
         }
-        if webhook_url:
-            payload["hf_webhook"] = webhook_url
-
-        headers = {"Authorization": self.settings.authorization_header}
+        params = {"hf_webhook": webhook_url} if webhook_url else None
+        model_id = self.settings.hf_image_model_id.strip().strip("/")
 
         async with httpx.AsyncClient(timeout=self.settings.hf_timeout_seconds) as client:
             response = await client.post(
-                f"{self.base_url}/v1/text-to-image",
+                f"{self.base_url}/{model_id}",
                 json=payload,
-                headers=headers,
+                headers=self._headers,
+                params=params,
             )
 
         if response.status_code >= 400:
@@ -51,11 +56,18 @@ class HiggsfieldClient:
             "raw_response": data,
         }
 
-    async def cancel_image(self, cancel_url: str) -> dict[str, Any]:
-        headers = {"Authorization": self.settings.authorization_header}
-
+    async def get_request_status(self, status_url: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.settings.hf_timeout_seconds) as client:
-            response = await client.post(cancel_url, headers=headers)
+            response = await client.get(status_url, headers=self._headers)
+
+        if response.status_code >= 400:
+            raise RuntimeError(f"Higgsfield status request failed: {response.text}")
+
+        return response.json()
+
+    async def cancel_image(self, cancel_url: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.settings.hf_timeout_seconds) as client:
+            response = await client.post(cancel_url, headers=self._headers)
 
         if response.status_code >= 400:
             raise RuntimeError(f"Higgsfield cancel request failed: {response.text}")

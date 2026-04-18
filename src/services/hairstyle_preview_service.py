@@ -44,6 +44,70 @@ class HairstylePreviewService:
             return HairstylePreviewStatus.CANCELLED
         return HairstylePreviewStatus.QUEUED
 
+    @staticmethod
+    def _is_terminal_status(status: HairstylePreviewStatus) -> bool:
+        return status in {
+            HairstylePreviewStatus.COMPLETED,
+            HairstylePreviewStatus.FAILED,
+            HairstylePreviewStatus.BLOCKED,
+            HairstylePreviewStatus.APPROVED,
+            HairstylePreviewStatus.CANCELLED,
+        }
+
+    @staticmethod
+    def _extract_image_url(payload: dict) -> str | None:
+        images = payload.get("images") or []
+        if images and isinstance(images[0], dict):
+            image_url = images[0].get("url")
+            if image_url:
+                return image_url
+
+        payload_data = payload.get("payload") or {}
+        legacy_images = payload_data.get("images") or []
+        if legacy_images and isinstance(legacy_images[0], dict):
+            return legacy_images[0].get("url")
+
+        return None
+
+    async def _build_updates_from_provider_payload(self, preview: dict, payload: dict) -> dict:
+        status = str(payload.get("status", "")).lower()
+        updates: dict = {
+            "status": self._map_provider_status(status),
+            "error": None,
+        }
+
+        if payload.get("request_id"):
+            updates["provider_request_id"] = payload["request_id"]
+        if payload.get("status_url"):
+            updates["status_url"] = payload["status_url"]
+        if payload.get("cancel_url"):
+            updates["cancel_url"] = payload["cancel_url"]
+
+        if status == "completed":
+            image_url = self._extract_image_url(payload)
+
+            if image_url:
+                try:
+                    image_url = await self.image_storage_service.mirror_generated_image(
+                        preview_id=preview["id"],
+                        source_url=image_url,
+                    )
+                except Exception:
+                    # Fall back to provider URL to avoid losing completion signal.
+                    pass
+
+            updates["generated_image_url"] = image_url
+        elif status == "failed":
+            updates["error"] = payload.get("error") or "Generation failed"
+            updates["generated_image_url"] = None
+        elif status == "nsfw":
+            updates["error"] = "Blocked as NSFW"
+            updates["generated_image_url"] = None
+        elif status == "cancelled":
+            updates["generated_image_url"] = None
+
+        return updates
+
     async def create_preview(
         self,
         user_id: int,
@@ -105,7 +169,26 @@ class HairstylePreviewService:
         )
 
     async def get_preview(self, preview_id: int) -> dict | None:
-        return await self.preview_repo.get(preview_id)
+        preview = await self.preview_repo.get(preview_id)
+        if not preview:
+            return None
+
+        status_url = preview.get("status_url")
+        if (
+            not self._is_terminal_status(preview["status"])
+            and status_url
+            and self.settings.has_higgsfield_credentials
+        ):
+            try:
+                provider_payload = await self.higgsfield_client.get_request_status(status_url)
+                updates = await self._build_updates_from_provider_payload(preview, provider_payload)
+                refreshed_preview = await self.preview_repo.update(preview_id, updates)
+                if refreshed_preview:
+                    return refreshed_preview
+            except Exception:
+                pass
+
+        return preview
 
     async def approve_preview(self, preview_id: int):
         preview = await self.get_preview(preview_id)
@@ -211,44 +294,6 @@ class HairstylePreviewService:
         if not preview:
             return {"ok": True, "ignored": True, "reason": "unknown_request_id"}
 
-        status = str(payload.get("status", "")).lower()
-        updates: dict = {}
-
-        if status == "completed":
-            payload_data = payload.get("payload") or {}
-            images = payload_data.get("images") or []
-            image_url = images[0].get("url") if images else None
-
-            if image_url:
-                try:
-                    image_url = await self.image_storage_service.mirror_generated_image(
-                        preview_id=preview["id"],
-                        source_url=image_url,
-                    )
-                except Exception:
-                    # Fall back to provider URL to avoid losing completion signal.
-                    pass
-
-            updates = {
-                "status": HairstylePreviewStatus.COMPLETED,
-                "generated_image_url": image_url,
-                "error": None,
-            }
-        elif status == "failed":
-            updates = {
-                "status": HairstylePreviewStatus.FAILED,
-                "error": payload.get("error") or "Generation failed",
-            }
-        elif status == "nsfw":
-            updates = {
-                "status": HairstylePreviewStatus.BLOCKED,
-                "error": "Blocked as NSFW",
-            }
-        else:
-            updates = {
-                "status": HairstylePreviewStatus.PROCESSING,
-                "error": None,
-            }
-
+        updates = await self._build_updates_from_provider_payload(preview, payload)
         await self.preview_repo.update(preview["id"], updates)
         return {"ok": True}

@@ -14,11 +14,11 @@ So from the frontend point of view, everything is under the **same backend base 
 
 Example:
 
-- Frontend base API URL: `https://subpeltately-superstoical-shavonne.ngrok-free.dev/`
-- Generate preview: `https://subpeltately-superstoical-shavonne.ngrok-free.dev//hairstyle-previews`
-- Upload photos: `https://subpeltately-superstoical-shavonne.ngrok-free.dev//clients/{client_id}/photos`
+- Frontend base API URL: `https://subpeltately-superstoical-shavonne.ngrok-free.dev`
+- Generate preview: `https://subpeltately-superstoical-shavonne.ngrok-free.dev/hairstyle-previews`
+- Upload photos: `https://subpeltately-superstoical-shavonne.ngrok-free.dev/clients/{client_id}/photos`
 - Higgsfield webhook target:
-  `https://subpeltately-superstoical-shavonne.ngrok-free.dev//hairstyle-previews/webhooks/higgsfield-image`
+  `https://subpeltately-superstoical-shavonne.ngrok-free.dev/hairstyle-previews/webhooks/higgsfield-image`
 
 ## Important environment variables
 
@@ -32,10 +32,10 @@ The backend needs these variables configured:
 `PUBLIC_BASE_URL` must be the public URL of this backend, for example:
 
 ```env
-PUBLIC_BASE_URL=https://subpeltately-superstoical-shavonne.ngrok-free.dev/
+PUBLIC_BASE_URL=https://subpeltately-superstoical-shavonne.ngrok-free.dev
 ```
 
-Without a valid public `PUBLIC_BASE_URL`, Higgsfield cannot call the webhook on this backend.
+`PUBLIC_BASE_URL` is recommended so Higgsfield can push webhook updates to this backend. If it is missing, frontend polling can still reconcile with Higgsfield through the stored `status_url`, but webhook-driven updates will not work.
 
 For local frontend development, allow the frontend origin in CORS:
 
@@ -369,13 +369,13 @@ Show:
 
 ## Important implementation notes
 
-### 1. Webhook dependency
+### 1. Webhook and polling
 
-The current generation completion flow depends on Higgsfield calling:
+The preferred completion path is Higgsfield calling:
 
 `POST /hairstyle-previews/webhooks/higgsfield-image`
 
-If the backend is not publicly reachable, the preview may remain in `queued` or `processing`.
+If webhook delivery is delayed or the backend is not publicly reachable, polling `GET /hairstyle-previews/{preview_id}` will also reconcile the current provider status through Higgsfield's `status_url`.
 
 ### 2. Temporary preview storage
 
