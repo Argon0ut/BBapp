@@ -6,6 +6,7 @@ from src.models.hairstyle_preview_request import HairstylePreviewStatus
 
 
 class HairstylePreviewGenerateSchema(BaseModel):
+    user_id: int | None = None
     text_prompt: str
     aspect_ratio: str = "1:1"
     resolution: str = "720p"

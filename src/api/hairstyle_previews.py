@@ -24,9 +24,10 @@ async def create_hairstyle_preview(
     service: Annotated[HairstylePreviewService, Depends(hairstyle_preview_dependency)],
     current_user: Annotated[AuthUser, Depends(require_admin())],
 ):
+    target_user_id = data.user_id or current_user.id
     try:
         return await service.create_preview(
-            user_id=current_user.id,
+            user_id=target_user_id,
             prompt=data.text_prompt,
             aspect_ratio=data.aspect_ratio,
             resolution=data.resolution,

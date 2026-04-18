@@ -1,6 +1,7 @@
 import os
 
 from fastapi import UploadFile
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.models.client_photos import ClientPhoto, ClientPhotoType
 from src.repositories.client_photo_repository import ClientPhotosRepository
@@ -20,22 +21,44 @@ class ClientPhotoService:
         file: UploadFile,
     ) -> ClientPhoto:
         if file.content_type not in ALLOWED_TYPES:
-            raise Exception("File Type not allowed")
+            raise ValueError("File type not allowed")
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        filename = f"user_{user_id}_{photo_type.value}.jpg"
+        extension = (file.filename or "image.jpg").rsplit(".", 1)[-1].lower()
+        if extension not in {"jpg", "jpeg", "png", "webp"}:
+            extension = "jpg"
+        filename = f"user_{user_id}_{photo_type.value}.{extension}"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
-        with open(file_path, "wb") as f:
-            while content := await file.read(1024 * 1024):
-                f.write(content)
+        try:
+            with open(file_path, "wb") as f:
+                while content := await file.read(1024 * 1024):
+                    f.write(content)
+        except OSError as exc:
+            raise RuntimeError(f"Unable to save uploaded file: {exc}") from exc
 
-        data = {
-            "user_id": user_id,
-            "photo_type": photo_type,
-            "file_path": file_path,
-        }
-        return await self.client_photos_repo.add_one(data)
+        try:
+            existing = await self.client_photos_repo.get_by_user_and_type(
+                user_id, photo_type.value
+            )
+            if existing:
+                updated = await self.client_photos_repo.update_one(
+                    existing.id,
+                    {
+                        "file_path": file_path,
+                    },
+                )
+                return updated
+
+            data = {
+                "user_id": user_id,
+                "photo_type": photo_type.value,
+                "file_path": file_path,
+            }
+            return await self.client_photos_repo.add_one(data)
+        except SQLAlchemyError as exc:
+            # Helps expose schema mismatch issues (e.g. DB not migrated to user_id).
+            raise RuntimeError(f"Database error while saving photo: {exc}") from exc
 
     async def get_photos_by_user(self, user_id: int):
         photos = await self.client_photos_repo.get_one(user_id)
@@ -43,7 +66,7 @@ class ClientPhotoService:
         for photo in photos:
             res.append(
                 {
-                    "photo_type": photo.photo_type,
+                    "photo_type": ClientPhotoType(photo.photo_type),
                     "file_path": photo.file_path,
                 }
             )
@@ -53,7 +76,7 @@ class ClientPhotoService:
         photos = await self.get_photos_by_user(user_id)
         present = set()
         for photo in photos:
-            present.add(photo["photo_type"])
+            present.add(ClientPhotoType(photo["photo_type"]))
 
         front = ClientPhotoType.FRONT in present
         rear = ClientPhotoType.REAR in present
