@@ -20,12 +20,30 @@ class ClientPhotoService:
         self.client_photos_repo = client_photos_repo
         self.image_storage_service = image_storage_service
 
+    async def _serialize_photo(self, photo: ClientPhoto) -> dict:
+        file_name = self.image_storage_service.extract_file_name(photo.file_name)
+        if self.image_storage_service.enabled:
+            lookup_key = self.image_storage_service.build_client_photo_key(
+                user_id=photo.user_id,
+                file_name=file_name,
+            )
+        else:
+            lookup_key = os.path.join(UPLOAD_DIR, file_name)
+        file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
+        return {
+            "id": photo.id,
+            "user_id": photo.user_id,
+            "photo_type": ClientPhotoType(photo.photo_type),
+            "file_name": file_name,
+            "file_url": file_url,
+        }
+
     async def add_photo(
         self,
         user_id: int,
         photo_type: ClientPhotoType,
         file: UploadFile,
-    ) -> ClientPhoto:
+    ) -> dict:
         if file.content_type not in ALLOWED_TYPES:
             raise ValueError("File type not allowed")
 
@@ -42,7 +60,7 @@ class ClientPhotoService:
 
         try:
             if self.image_storage_service.enabled:
-                file_path = await self.image_storage_service.upload_client_photo(
+                file_name = await self.image_storage_service.upload_client_photo(
                     user_id=user_id,
                     photo_type=photo_type.value,
                     extension=extension,
@@ -51,9 +69,9 @@ class ClientPhotoService:
                 )
             else:
                 os.makedirs(UPLOAD_DIR, exist_ok=True)
-                filename = f"user_{user_id}_{photo_type.value}.{extension}"
-                file_path = os.path.join(UPLOAD_DIR, filename)
-                with open(file_path, "wb") as f:
+                file_name = f"{photo_type.value}_{user_id}.{extension}"
+                local_path = os.path.join(UPLOAD_DIR, file_name)
+                with open(local_path, "wb") as f:
                     f.write(content)
         except OSError as exc:
             raise RuntimeError(f"Unable to save uploaded file: {exc}") from exc
@@ -68,17 +86,18 @@ class ClientPhotoService:
                 updated = await self.client_photos_repo.update_one(
                     existing.id,
                     {
-                        "file_path": file_path,
+                        "file_name": file_name,
                     },
                 )
-                return updated
+                return await self._serialize_photo(updated)
 
             data = {
                 "user_id": user_id,
                 "photo_type": photo_type.value,
-                "file_path": file_path,
+                "file_name": file_name,
             }
-            return await self.client_photos_repo.add_one(data)
+            created = await self.client_photos_repo.add_one(data)
+            return await self._serialize_photo(created)
         except SQLAlchemyError as exc:
             # Helps expose schema mismatch issues (e.g. DB not migrated to user_id).
             raise RuntimeError(f"Database error while saving photo: {exc}") from exc
@@ -87,19 +106,29 @@ class ClientPhotoService:
         photos = await self.client_photos_repo.get_one(user_id)
         res = []
         for photo in photos:
+            file_name = self.image_storage_service.extract_file_name(photo.file_name)
+            if self.image_storage_service.enabled:
+                lookup_key = self.image_storage_service.build_client_photo_key(
+                    user_id=photo.user_id,
+                    file_name=file_name,
+                )
+            else:
+                lookup_key = os.path.join(UPLOAD_DIR, file_name)
+            file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
             res.append(
                 {
                     "photo_type": ClientPhotoType(photo.photo_type),
-                    "file_path": photo.file_path,
+                    "file_name": file_name,
+                    "file_url": file_url,
                 }
             )
         return res
 
     async def get_status(self, user_id: int):
-        photos = await self.get_photos_by_user(user_id)
+        photos = await self.client_photos_repo.get_one(user_id)
         present = set()
         for photo in photos:
-            present.add(ClientPhotoType(photo["photo_type"]))
+            present.add(ClientPhotoType(photo.photo_type))
 
         front = ClientPhotoType.FRONT in present
         rear = ClientPhotoType.REAR in present

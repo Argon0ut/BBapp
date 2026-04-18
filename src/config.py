@@ -34,6 +34,7 @@ class Settings(BaseModel):
     aws_public_base_url: str = os.getenv("AWS_PUBLIC_BASE_URL", "").rstrip("/")
     s3_client_photo_prefix: str = os.getenv("S3_CLIENT_PHOTO_PREFIX", "client-photos").strip("/")
     s3_generated_photo_prefix: str = os.getenv("S3_GENERATED_PHOTO_PREFIX", "generated-images").strip("/")
+    s3_presigned_ttl_seconds: int = int(os.getenv("S3_PRESIGNED_TTL_SECONDS", "3600"))
 
     @property
     def has_higgsfield_credentials(self) -> bool:

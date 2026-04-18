@@ -16,4 +16,4 @@ class ClientPhoto(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("auth_users.id", ondelete="CASCADE"), index=True, nullable=False)
     photo_type = Column(String, index=True)
-    file_path = Column(String, index=True)
+    file_name = Column(String, index=True)

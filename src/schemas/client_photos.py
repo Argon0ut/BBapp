@@ -5,11 +5,13 @@ class ClientPhotoResponseSchema(BaseModel):
     id: int
     user_id: int
     photo_type: ClientPhotoType
-    file_path: str
+    file_name: str
+    file_url: str
 
 class ClientPhotoAddressSchema(BaseModel):
     photo_type: ClientPhotoType
-    file_path: str
+    file_name: str
+    file_url: str
 
 class ClientPhotoCompletenessSchema(BaseModel):
     front: bool = False

@@ -9,7 +9,7 @@ def run_mock_ai(client_photos: list[dict], preview_id: int) -> list[str]:
     generated_images = []
 
     for photo in client_photos:
-        src = photo['file_path']
+        src = photo.get("file_path") or photo.get("file_name")
         photo_type = photo.get('photo_type') or photo.get('image_type')
         filename = f"hairstyle_preview_{preview_id}_{photo_type}.jpg"
         dst = os.path.join(GENERATED_DIR, filename)
@@ -18,5 +18,4 @@ def run_mock_ai(client_photos: list[dict], preview_id: int) -> list[str]:
         generated_images.append(dst)
 
     return generated_images
-
 
