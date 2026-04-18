@@ -12,6 +12,7 @@ from src.services.user_service import UserService
 
 from src.repositories.client_photo_repository import ClientPhotosRepository
 from src.services.client_photo_service import ClientPhotoService
+from src.services.image_storage_service import ImageStorageService
 
 from src.repositories.hairstyle_preview_repository import HairstylePreviewRepository
 from src.services.hairstyle_preview_service import HairstylePreviewService
@@ -74,7 +75,9 @@ async def client_photo_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ClientPhotoService:
     repo = ClientPhotosRepository(session)
-    return ClientPhotoService(repo)
+    settings = get_settings()
+    image_storage = ImageStorageService(settings)
+    return ClientPhotoService(repo, image_storage)
 
 async def hairstyle_preview_service(
     photo_service: Annotated[ClientPhotoService, Depends(client_photo_service)],
@@ -82,4 +85,11 @@ async def hairstyle_preview_service(
     repo = HairstylePreviewRepository()
     settings = get_settings()
     higgsfield_client = HiggsfieldClient(settings)
-    return HairstylePreviewService(repo, photo_service, higgsfield_client, settings)
+    image_storage = ImageStorageService(settings)
+    return HairstylePreviewService(
+        repo,
+        photo_service,
+        higgsfield_client,
+        image_storage,
+        settings,
+    )

@@ -5,14 +5,20 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.models.client_photos import ClientPhoto, ClientPhotoType
 from src.repositories.client_photo_repository import ClientPhotosRepository
+from src.services.image_storage_service import ImageStorageService
 
 UPLOAD_DIR = "uploads/client_photos"
 ALLOWED_TYPES = ["image/jpg", "image/png", "image/webp", "image/jpeg"]
 
 
 class ClientPhotoService:
-    def __init__(self, client_photos_repo: ClientPhotosRepository):
+    def __init__(
+        self,
+        client_photos_repo: ClientPhotosRepository,
+        image_storage_service: ImageStorageService,
+    ):
         self.client_photos_repo = client_photos_repo
+        self.image_storage_service = image_storage_service
 
     async def add_photo(
         self,
@@ -23,19 +29,36 @@ class ClientPhotoService:
         if file.content_type not in ALLOWED_TYPES:
             raise ValueError("File type not allowed")
 
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
         extension = (file.filename or "image.jpg").rsplit(".", 1)[-1].lower()
         if extension not in {"jpg", "jpeg", "png", "webp"}:
             extension = "jpg"
-        filename = f"user_{user_id}_{photo_type.value}.{extension}"
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        content_type = file.content_type or "image/jpeg"
 
         try:
-            with open(file_path, "wb") as f:
-                while content := await file.read(1024 * 1024):
+            content = await file.read()
+            await file.seek(0)
+        except OSError as exc:
+            raise RuntimeError(f"Unable to read uploaded file: {exc}") from exc
+
+        try:
+            if self.image_storage_service.enabled:
+                file_path = await self.image_storage_service.upload_client_photo(
+                    user_id=user_id,
+                    photo_type=photo_type.value,
+                    extension=extension,
+                    content=content,
+                    content_type=content_type,
+                )
+            else:
+                os.makedirs(UPLOAD_DIR, exist_ok=True)
+                filename = f"user_{user_id}_{photo_type.value}.{extension}"
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                with open(file_path, "wb") as f:
                     f.write(content)
         except OSError as exc:
             raise RuntimeError(f"Unable to save uploaded file: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Unable to upload file: {exc}") from exc
 
         try:
             existing = await self.client_photos_repo.get_by_user_and_type(

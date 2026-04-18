@@ -5,6 +5,7 @@ from src.models.hairstyle_preview_request import HairstylePreviewStatus
 from src.repositories.hairstyle_preview_repository import HairstylePreviewRepository
 from src.services.client_photo_service import ClientPhotoService
 from src.services.higgsfield_client import HiggsfieldClient
+from src.services.image_storage_service import ImageStorageService
 
 
 class HairstylePreviewService:
@@ -13,11 +14,13 @@ class HairstylePreviewService:
         repo: HairstylePreviewRepository,
         client_photo_service: ClientPhotoService,
         higgsfield_client: HiggsfieldClient,
+        image_storage_service: ImageStorageService,
         settings: Settings,
     ):
         self.preview_repo = repo
         self.client_photo_service = client_photo_service
         self.higgsfield_client = higgsfield_client
+        self.image_storage_service = image_storage_service
         self.settings = settings
 
     def _build_webhook_url(self) -> str | None:
@@ -215,6 +218,17 @@ class HairstylePreviewService:
             payload_data = payload.get("payload") or {}
             images = payload_data.get("images") or []
             image_url = images[0].get("url") if images else None
+
+            if image_url:
+                try:
+                    image_url = await self.image_storage_service.mirror_generated_image(
+                        preview_id=preview["id"],
+                        source_url=image_url,
+                    )
+                except Exception:
+                    # Fall back to provider URL to avoid losing completion signal.
+                    pass
+
             updates = {
                 "status": HairstylePreviewStatus.COMPLETED,
                 "generated_image_url": image_url,

@@ -26,7 +26,7 @@ legacy_router = APIRouter(
 )
 
 
-@router.post("", response_model=ClientPhotoResponseSchema, status_code=201)
+@router.post("/upload", response_model=ClientPhotoResponseSchema, status_code=201)
 async def upload_user_photo(
     photo_type: ClientPhotoType,
     client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
@@ -39,6 +39,8 @@ async def upload_user_photo(
         raise HTTPException(status_code=415, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+    
 
 
 @router.get("", response_model=List[ClientPhotoAddressSchema], status_code=200)
