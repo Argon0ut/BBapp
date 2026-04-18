@@ -34,16 +34,20 @@ class ClientPhotoService:
         file_name = self.image_storage_service.extract_file_name(photo.file_name)
         return os.path.join(UPLOAD_DIR, file_name)
 
+    def _build_file_url(self, photo: ClientPhoto) -> str:
+        photo_type = ClientPhotoType(photo.photo_type).value
+        path = f"/clients/{photo.user_id}/photos/{photo_type}/file"
+        base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
+        return f"{base_url}{path}" if base_url else path
+
     async def _serialize_photo(self, photo: ClientPhoto) -> dict:
         file_name = self.image_storage_service.extract_file_name(photo.file_name)
-        lookup_key = self._resolve_lookup_key(photo)
-        file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
         return {
             "id": photo.id,
             "user_id": photo.user_id,
             "photo_type": ClientPhotoType(photo.photo_type),
             "file_name": file_name,
-            "file_url": file_url,
+            "file_url": self._build_file_url(photo),
         }
 
     async def add_photo(
@@ -115,13 +119,11 @@ class ClientPhotoService:
         res = []
         for photo in photos:
             file_name = self.image_storage_service.extract_file_name(photo.file_name)
-            lookup_key = self._resolve_lookup_key(photo)
-            file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
             res.append(
                 {
                     "photo_type": ClientPhotoType(photo.photo_type),
                     "file_name": file_name,
-                    "file_url": file_url,
+                    "file_url": self._build_file_url(photo),
                 }
             )
         return res

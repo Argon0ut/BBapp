@@ -16,6 +16,50 @@ def _getenv_stripped(*names: str) -> str:
     return ""
 
 
+def _resolve_aws_credentials() -> tuple[str, str]:
+    standard_access = _getenv_stripped("AWS_ACCESS_KEY_ID")
+    standard_secret = _getenv_stripped("AWS_SECRET_ACCESS_KEY")
+    legacy_access = _getenv_stripped("AWS_ACCESS_KEY")
+    legacy_secret = _getenv_stripped("AWS_SECRET_KEY")
+
+    standard_present = bool(standard_access or standard_secret)
+    legacy_present = bool(legacy_access or legacy_secret)
+
+    if standard_present and legacy_present:
+        if standard_access and standard_secret and legacy_access and legacy_secret:
+            if standard_access != legacy_access or standard_secret != legacy_secret:
+                raise ValueError(
+                    "Conflicting AWS credentials configured. Keep only one credential pair "
+                    "or make both naming schemes match."
+                )
+            return standard_access, standard_secret
+        raise ValueError(
+            "Incomplete AWS credentials configured across standard and legacy env vars. "
+            "Set one complete pair: AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or "
+            "AWS_ACCESS_KEY/AWS_SECRET_KEY."
+        )
+
+    if standard_present:
+        if not (standard_access and standard_secret):
+            raise ValueError(
+                "Incomplete AWS credentials. Set both AWS_ACCESS_KEY_ID and "
+                "AWS_SECRET_ACCESS_KEY."
+            )
+        return standard_access, standard_secret
+
+    if legacy_present:
+        if not (legacy_access and legacy_secret):
+            raise ValueError(
+                "Incomplete AWS credentials. Set both AWS_ACCESS_KEY and AWS_SECRET_KEY."
+            )
+        return legacy_access, legacy_secret
+
+    return "", ""
+
+
+_AWS_ACCESS_KEY, _AWS_SECRET_KEY = _resolve_aws_credentials()
+
+
 class Settings(BaseModel):
     hf_api_key: str = os.getenv("HF_API_KEY", "")
     hf_secret_key: str = os.getenv("HF_SECRET_KEY", "")
@@ -35,8 +79,8 @@ class Settings(BaseModel):
         ).split(",")
         if origin.strip()
     ]
-    aws_access_key: str = _getenv_stripped("AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY")
-    aws_secret_key: str = _getenv_stripped("AWS_SECRET_ACCESS_KEY", "AWS_SECRET_KEY")
+    aws_access_key: str = _AWS_ACCESS_KEY
+    aws_secret_key: str = _AWS_SECRET_KEY
     aws_session_token: str = _getenv_stripped("AWS_SESSION_TOKEN")
     aws_region: str = _getenv_stripped("AWS_REGION")
     aws_bucket_name: str = _getenv_stripped("AWS_BUCKET_NAME")
