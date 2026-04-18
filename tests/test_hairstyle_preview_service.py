@@ -184,12 +184,16 @@ async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
         "https://storage.example/front.jpg",
         "https://storage.example/right.jpg",
     ]
-    assert "Identity reference only" in call["prompt"]
+    assert "HAIR-ONLY EDIT" in call["prompt"]
     assert "2 attached photos" in call["prompt"]
-    assert "front-facing head-and-shoulders portrait" in call["prompt"]
+    assert "exact ethnicity and race" in call["prompt"]
+    assert "exact skin tone and undertone" in call["prompt"]
+    assert "Do NOT change ethnicity" in call["prompt"]
+    assert "Do NOT swap the face" in call["prompt"]
     assert "Do NOT render the back or side of the head" in call["prompt"]
+    assert "front-facing head-and-shoulders portrait" in call["prompt"]
     assert call["prompt"].endswith(
-        "New hairstyle to render on this person: short bob haircut"
+        "New hairstyle to apply (this is the ONLY thing to change): short bob haircut"
     )
 
 
