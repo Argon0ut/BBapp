@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterable
 
 from fastapi import UploadFile
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,6 +10,12 @@ from src.services.image_storage_service import ImageStorageService
 
 UPLOAD_DIR = "uploads/client_photos"
 ALLOWED_TYPES = ["image/jpg", "image/png", "image/webp", "image/jpeg"]
+_PHOTO_TYPE_ORDER = {
+    ClientPhotoType.FRONT.value: 0,
+    ClientPhotoType.REAR.value: 1,
+    ClientPhotoType.LEFT.value: 2,
+    ClientPhotoType.RIGHT.value: 3,
+}
 
 
 class ClientPhotoService:
@@ -39,6 +46,34 @@ class ClientPhotoService:
         path = f"/clients/{photo.user_id}/photos/{photo_type}/file"
         base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
         return f"{base_url}{path}" if base_url else path
+
+    def _build_provider_subject(self, user_id: int, photo_type: ClientPhotoType) -> str:
+        return f"client-photo:{user_id}:{photo_type.value}"
+
+    def _build_provider_file_url(self, photo: ClientPhoto) -> str:
+        base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
+        if not base_url:
+            raise RuntimeError(
+                "PUBLIC_BASE_URL is required to expose client photos to Higgsfield when S3 storage is not configured"
+            )
+
+        photo_type = ClientPhotoType(photo.photo_type)
+        expires_at = self.image_storage_service.build_signed_media_expires_at()
+        token = self.image_storage_service.build_signed_media_token(
+            subject=self._build_provider_subject(photo.user_id, photo_type),
+            expires_at=expires_at,
+        )
+        return (
+            f"{base_url}/clients/{photo.user_id}/photos/{photo_type.value}/provider-file"
+            f"?expires_at={expires_at}&token={token}"
+        )
+
+    @staticmethod
+    def _sort_photos(photos: Iterable[ClientPhoto]) -> list[ClientPhoto]:
+        return sorted(
+            photos,
+            key=lambda photo: _PHOTO_TYPE_ORDER.get(str(photo.photo_type), 999),
+        )
 
     async def _serialize_photo(self, photo: ClientPhoto) -> dict:
         file_name = self.image_storage_service.extract_file_name(photo.file_name)
@@ -141,6 +176,33 @@ class ClientPhotoService:
         content, content_type = await self.image_storage_service.get_client_photo_content(lookup_key)
         file_name = self.image_storage_service.extract_file_name(photo.file_name) or f"{photo_type.value}.jpg"
         return content, content_type, file_name
+
+    def can_access_provider_file(
+        self,
+        user_id: int,
+        photo_type: ClientPhotoType,
+        expires_at: int,
+        token: str | None,
+    ) -> bool:
+        return self.image_storage_service.verify_signed_media_token(
+            subject=self._build_provider_subject(user_id, photo_type),
+            expires_at=expires_at,
+            token=token,
+        )
+
+    async def get_provider_photo_urls(self, user_id: int) -> list[str]:
+        photos = self._sort_photos(await self.client_photos_repo.get_one(user_id))
+        urls: list[str] = []
+        for photo in photos:
+            if self.image_storage_service.enabled:
+                urls.append(
+                    await self.image_storage_service.get_client_photo_url(
+                        self._resolve_lookup_key(photo)
+                    )
+                )
+            else:
+                urls.append(self._build_provider_file_url(photo))
+        return urls
 
     async def get_status(self, user_id: int):
         photos = await self.client_photos_repo.get_one(user_id)

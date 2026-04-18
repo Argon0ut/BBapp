@@ -52,6 +52,10 @@ async def test_generate_image_uses_model_path_and_query_param_for_webhook(monkey
         aspect_ratio="1:1",
         resolution="720p",
         webhook_url="https://app.example.com/hairstyle-previews/webhooks/higgsfield-image",
+        image_urls=[
+            "https://storage.example/front.jpg",
+            "https://storage.example/right.jpg",
+        ],
     )
 
     assert response["request_id"] == "req-1"
@@ -63,4 +67,8 @@ async def test_generate_image_uses_model_path_and_query_param_for_webhook(monkey
         "prompt": "short bob haircut",
         "aspect_ratio": "1:1",
         "resolution": "720p",
+        "image_urls": [
+            "https://storage.example/front.jpg",
+            "https://storage.example/right.jpg",
+        ],
     }

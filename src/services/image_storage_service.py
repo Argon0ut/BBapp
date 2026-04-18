@@ -1,5 +1,8 @@
 import asyncio
+import hashlib
+import hmac
 import mimetypes
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -44,6 +47,52 @@ class ImageStorageService:
             f"{self.settings.aws_region}.amazonaws.com/{key}"
         )
 
+    async def get_object_url(self, key: str) -> str:
+        if not self._client:
+            return key
+        if self.settings.aws_public_base_url:
+            return self._public_url_for_key(key)
+
+        return await asyncio.to_thread(
+            self._client.generate_presigned_url,
+            "get_object",
+            Params={"Bucket": self.settings.aws_bucket_name, "Key": key},
+            ExpiresIn=self.settings.s3_presigned_ttl_seconds,
+        )
+
+    def _media_signing_secret(self) -> bytes:
+        raw_secret = (
+            self.settings.hf_secret_key
+            or self.settings.aws_secret_key
+            or self.settings.aws_access_key
+        )
+        if not raw_secret:
+            raise RuntimeError("A secret is required to sign media URLs")
+        return raw_secret.encode("utf-8")
+
+    def build_signed_media_expires_at(self) -> int:
+        return int(time.time()) + self.settings.s3_presigned_ttl_seconds
+
+    def build_signed_media_token(self, subject: str, expires_at: int) -> str:
+        payload = f"{subject}:{expires_at}".encode("utf-8")
+        return hmac.new(
+            self._media_signing_secret(),
+            payload,
+            hashlib.sha256,
+        ).hexdigest()
+
+    def verify_signed_media_token(
+        self,
+        subject: str,
+        expires_at: int,
+        token: str | None,
+    ) -> bool:
+        if not token or expires_at < int(time.time()):
+            return False
+
+        expected = self.build_signed_media_token(subject=subject, expires_at=expires_at)
+        return hmac.compare_digest(token, expected)
+
     async def upload_bytes(self, key: str, content: bytes, content_type: str) -> str:
         if not self._client:
             raise RuntimeError("S3 storage is not configured")
@@ -58,15 +107,7 @@ class ImageStorageService:
         return key
 
     async def get_client_photo_url(self, key: str) -> str:
-        if not self._client:
-            return key
-
-        return await asyncio.to_thread(
-            self._client.generate_presigned_url,
-            "get_object",
-            Params={"Bucket": self.settings.aws_bucket_name, "Key": key},
-            ExpiresIn=self.settings.s3_presigned_ttl_seconds,
-        )
+        return await self.get_object_url(key)
 
     async def get_client_photo_content(self, key: str) -> tuple[bytes, str]:
         if self._client:
@@ -125,7 +166,63 @@ class ImageStorageService:
             f"preview_{preview_id}_{uuid4().hex}.{extension}"
         )
         await self.upload_bytes(key=key, content=response.content, content_type=content_type)
-        return self._public_url_for_key(key)
+        return await self.get_object_url(key)
+
+    def is_managed_storage_url(
+        self,
+        stored_value: str | None,
+        *,
+        expected_prefix: str | None = None,
+    ) -> bool:
+        raw_value = (stored_value or "").strip()
+        if not raw_value or not self._client:
+            return False
+
+        key = self.extract_key_from_stored_value(raw_value)
+        if not key:
+            return False
+
+        if expected_prefix:
+            normalized_prefix = expected_prefix.strip("/")
+            if key != normalized_prefix and not key.startswith(f"{normalized_prefix}/"):
+                return False
+
+        if "://" not in raw_value:
+            return True
+
+        parsed = urlparse(raw_value)
+        if not parsed.netloc:
+            return False
+
+        managed_hosts = set()
+        if self.settings.aws_public_base_url:
+            public_host = urlparse(self.settings.aws_public_base_url).netloc
+            if public_host:
+                managed_hosts.add(public_host)
+
+        bucket_host = (
+            f"{self.settings.aws_bucket_name}.s3.{self.settings.aws_region}.amazonaws.com"
+            if self.settings.aws_bucket_name and self.settings.aws_region
+            else ""
+        )
+        if bucket_host:
+            managed_hosts.add(bucket_host)
+
+        return parsed.netloc in managed_hosts
+
+    async def refresh_managed_storage_url(
+        self,
+        stored_value: str | None,
+        *,
+        expected_prefix: str | None = None,
+    ) -> str | None:
+        if not stored_value:
+            return stored_value
+        if not self.is_managed_storage_url(stored_value, expected_prefix=expected_prefix):
+            return stored_value
+
+        key = self.extract_key_from_stored_value(stored_value)
+        return await self.get_object_url(key)
 
     @staticmethod
     def extract_key_from_stored_value(stored_value: str | None) -> str:

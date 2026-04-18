@@ -13,12 +13,33 @@ class StubClientPhotoService:
     async def get_status(self, user_id: int) -> dict:
         return {"partially_completed": True}
 
+    async def get_provider_photo_urls(self, user_id: int) -> list[str]:
+        return [
+            "https://storage.example/front.jpg",
+            "https://storage.example/right.jpg",
+        ]
+
 
 class StubHiggsfieldClient:
     def __init__(self, status_payload: dict | None = None):
         self.status_payload = status_payload or {}
+        self.last_generate_call = None
 
-    async def generate_image(self, prompt: str, aspect_ratio: str, resolution: str, webhook_url: str | None) -> dict:
+    async def generate_image(
+        self,
+        prompt: str,
+        aspect_ratio: str,
+        resolution: str,
+        webhook_url: str | None,
+        image_urls: list[str] | None = None,
+    ) -> dict:
+        self.last_generate_call = {
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "webhook_url": webhook_url,
+            "image_urls": image_urls,
+        }
         return {
             "request_id": "req-1",
             "status": "queued",
@@ -37,6 +58,16 @@ class StubImageStorageService:
     async def mirror_generated_image(self, preview_id: int, source_url: str) -> str:
         return f"https://cdn.example/generated/{preview_id}.jpg"
 
+    async def refresh_managed_storage_url(
+        self,
+        stored_value: str | None,
+        *,
+        expected_prefix: str | None = None,
+    ) -> str | None:
+        if stored_value == "https://bb-app-s3.s3.eu-north-1.amazonaws.com/generated-images/preview_1.jpg":
+            return "https://cdn.example/generated/1.jpg"
+        return stored_value
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_preview_repo():
@@ -48,18 +79,20 @@ async def clean_preview_repo():
 
 def _build_service(status_payload: dict | None = None) -> tuple[HairstylePreviewService, HairstylePreviewRepository]:
     repo = HairstylePreviewRepository()
+    higgsfield_client = StubHiggsfieldClient(status_payload=status_payload)
     settings = SimpleNamespace(
         public_base_url="https://app.example.com",
         has_higgsfield_credentials=True,
+        s3_generated_photo_prefix="generated-images",
     )
     service = HairstylePreviewService(
         repo=repo,
         client_photo_service=StubClientPhotoService(),
-        higgsfield_client=StubHiggsfieldClient(status_payload=status_payload),
+        higgsfield_client=higgsfield_client,
         image_storage_service=StubImageStorageService(),
         settings=settings,
     )
-    return service, repo
+    return service, repo, higgsfield_client
 
 
 def _build_preview_request() -> dict:
@@ -85,7 +118,7 @@ def _build_preview_request() -> dict:
 
 @pytest.mark.asyncio
 async def test_webhook_handles_top_level_completed_images():
-    service, repo = _build_service()
+    service, repo, _ = _build_service()
     await repo.add(_build_preview_request())
 
     response = await service.handle_higgsfield_webhook(
@@ -106,7 +139,7 @@ async def test_webhook_handles_top_level_completed_images():
 
 @pytest.mark.asyncio
 async def test_get_preview_reconciles_provider_status_from_status_url():
-    service, repo = _build_service(
+    service, repo, _ = _build_service(
         status_payload={
             "status": "completed",
             "request_id": "req-1",
@@ -123,3 +156,40 @@ async def test_get_preview_reconciles_provider_status_from_status_url():
     assert preview["status"] == HairstylePreviewStatus.COMPLETED
     assert preview["generated_image_url"] == "https://cdn.example/generated/1.jpg"
     assert preview["status_url"] == "https://platform.higgsfield.ai/requests/req-1/status"
+
+
+@pytest.mark.asyncio
+async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
+    service, _, higgsfield_client = _build_service()
+
+    preview = await service.create_preview(
+        user_id=42,
+        prompt="short bob haircut",
+    )
+
+    assert preview["status"] == HairstylePreviewStatus.QUEUED
+    assert higgsfield_client.last_generate_call == {
+        "prompt": "short bob haircut",
+        "aspect_ratio": "1:1",
+        "resolution": "720p",
+        "webhook_url": "https://app.example.com/hairstyle-previews/webhooks/higgsfield-image",
+        "image_urls": [
+            "https://storage.example/front.jpg",
+            "https://storage.example/right.jpg",
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_preview_refreshes_managed_s3_urls():
+    service, repo, _ = _build_service()
+    preview_request = _build_preview_request()
+    preview_request["status"] = HairstylePreviewStatus.COMPLETED
+    preview_request["generated_image_url"] = (
+        "https://bb-app-s3.s3.eu-north-1.amazonaws.com/generated-images/preview_1.jpg"
+    )
+    await repo.add(preview_request)
+
+    preview = await service.get_preview(1)
+
+    assert preview["generated_image_url"] == "https://cdn.example/generated/1.jpg"

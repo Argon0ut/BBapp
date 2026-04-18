@@ -24,6 +24,7 @@ class HiggsfieldClient:
         aspect_ratio: str,
         resolution: str,
         webhook_url: str | None,
+        image_urls: list[str] | None = None,
     ) -> dict[str, Any]:
         if not self.settings.has_higgsfield_credentials:
             raise ValueError("Higgsfield credentials are not configured")
@@ -33,6 +34,8 @@ class HiggsfieldClient:
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
         }
+        if image_urls:
+            payload["image_urls"] = image_urls
         params = {"hf_webhook": webhook_url} if webhook_url else None
         model_id = self.settings.hf_image_model_id.strip().strip("/")
 

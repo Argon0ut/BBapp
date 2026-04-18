@@ -153,3 +153,36 @@ async def get_legacy_user_photo_file(
         media_type=content_type,
         headers={"Content-Disposition": f'inline; filename="{file_name}"'},
     )
+
+
+@legacy_router.get("/{photo_type}/provider-file")
+async def get_provider_user_photo_file(
+    user_id: int,
+    photo_type: ClientPhotoType,
+    expires_at: int,
+    token: str,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+):
+    if not client_photo_service.can_access_provider_file(
+        user_id=user_id,
+        photo_type=photo_type,
+        expires_at=expires_at,
+        token=token,
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or expired media token")
+
+    try:
+        content, content_type, file_name = await client_photo_service.get_photo_content(
+            user_id=user_id,
+            photo_type=photo_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{file_name}"'},
+    )

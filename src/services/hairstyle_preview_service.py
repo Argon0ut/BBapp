@@ -69,6 +69,18 @@ class HairstylePreviewService:
 
         return None
 
+    async def _refresh_preview_asset_urls(self, preview: dict | None) -> dict | None:
+        if not preview:
+            return preview
+
+        refreshed_preview = dict(preview)
+        for field_name in ("generated_image_url", "approved_image_url"):
+            refreshed_preview[field_name] = await self.image_storage_service.refresh_managed_storage_url(
+                refreshed_preview.get(field_name),
+                expected_prefix=self.settings.s3_generated_photo_prefix,
+            )
+        return refreshed_preview
+
     async def _build_updates_from_provider_payload(self, preview: dict, payload: dict) -> dict:
         status = str(payload.get("status", "")).lower()
         updates: dict = {
@@ -142,22 +154,25 @@ class HairstylePreviewService:
         await self.preview_repo.add(request)
 
         try:
+            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(user_id)
             provider_response = await self.higgsfield_client.generate_image(
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
                 webhook_url=self._build_webhook_url(),
+                image_urls=provider_photo_urls,
             )
         except Exception as exc:
-            return await self.preview_repo.update(
+            failed_preview = await self.preview_repo.update(
                 preview_id,
                 {
                     "status": HairstylePreviewStatus.FAILED,
                     "error": str(exc),
                 },
             )
+            return await self._refresh_preview_asset_urls(failed_preview)
 
-        return await self.preview_repo.update(
+        created_preview = await self.preview_repo.update(
             preview_id,
             {
                 "status": self._map_provider_status(provider_response["status"]),
@@ -167,6 +182,7 @@ class HairstylePreviewService:
                 "error": None,
             },
         )
+        return await self._refresh_preview_asset_urls(created_preview)
 
     async def get_preview(self, preview_id: int) -> dict | None:
         preview = await self.preview_repo.get(preview_id)
@@ -184,11 +200,11 @@ class HairstylePreviewService:
                 updates = await self._build_updates_from_provider_payload(preview, provider_payload)
                 refreshed_preview = await self.preview_repo.update(preview_id, updates)
                 if refreshed_preview:
-                    return refreshed_preview
+                    return await self._refresh_preview_asset_urls(refreshed_preview)
             except Exception:
                 pass
 
-        return preview
+        return await self._refresh_preview_asset_urls(preview)
 
     async def approve_preview(self, preview_id: int):
         preview = await self.get_preview(preview_id)
@@ -197,7 +213,7 @@ class HairstylePreviewService:
         if not preview.get("generated_image_url"):
             raise ValueError("Preview image is not ready yet")
 
-        return await self.preview_repo.update(
+        approved_preview = await self.preview_repo.update(
             preview_id,
             {
                 "status": HairstylePreviewStatus.APPROVED,
@@ -205,6 +221,7 @@ class HairstylePreviewService:
                 "error": None,
             },
         )
+        return await self._refresh_preview_asset_urls(approved_preview)
 
     async def regenerate_preview(
         self,
@@ -239,22 +256,25 @@ class HairstylePreviewService:
         )
 
         try:
+            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(preview["user_id"])
             provider_response = await self.higgsfield_client.generate_image(
                 prompt=next_prompt,
                 aspect_ratio=next_aspect_ratio,
                 resolution=next_resolution,
                 webhook_url=self._build_webhook_url(),
+                image_urls=provider_photo_urls,
             )
         except Exception as exc:
-            return await self.preview_repo.update(
+            failed_preview = await self.preview_repo.update(
                 preview_id,
                 {
                     "status": HairstylePreviewStatus.FAILED,
                     "error": str(exc),
                 },
             )
+            return await self._refresh_preview_asset_urls(failed_preview)
 
-        return await self.preview_repo.update(
+        regenerated_preview = await self.preview_repo.update(
             preview_id,
             {
                 "status": self._map_provider_status(provider_response["status"]),
@@ -264,6 +284,7 @@ class HairstylePreviewService:
                 "error": None,
             },
         )
+        return await self._refresh_preview_asset_urls(regenerated_preview)
 
     async def cancel_preview(self, preview_id: int):
         preview = await self.get_preview(preview_id)
@@ -277,13 +298,14 @@ class HairstylePreviewService:
             except Exception:
                 pass
 
-        return await self.preview_repo.update(
+        cancelled_preview = await self.preview_repo.update(
             preview_id,
             {
                 "status": HairstylePreviewStatus.CANCELLED,
                 "error": None,
             },
         )
+        return await self._refresh_preview_asset_urls(cancelled_preview)
 
     async def handle_higgsfield_webhook(self, payload: dict):
         provider_request_id = payload.get("request_id")
