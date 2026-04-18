@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from src.config import Settings
+from src.models.client_photos import ClientPhotoType
 from src.models.hairstyle_preview_request import HairstylePreviewStatus
 from src.repositories.hairstyle_preview_repository import HairstylePreviewRepository
 from src.services.client_photo_service import ClientPhotoService
@@ -126,6 +127,7 @@ class HairstylePreviewService:
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "720p",
+        selected_photo_types: list[ClientPhotoType] | None = None,
     ):
         status = await self.client_photo_service.get_status(user_id)
 
@@ -154,7 +156,10 @@ class HairstylePreviewService:
         await self.preview_repo.add(request)
 
         try:
-            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(user_id)
+            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(
+                user_id,
+                selected_photo_types=selected_photo_types,
+            )
             provider_response = await self.higgsfield_client.generate_image(
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
@@ -229,6 +234,7 @@ class HairstylePreviewService:
         text_prompt: str | None = None,
         aspect_ratio: str | None = None,
         resolution: str | None = None,
+        selected_photo_types: list[ClientPhotoType] | None = None,
     ):
         preview = await self.get_preview(preview_id)
         if not preview:
@@ -256,7 +262,10 @@ class HairstylePreviewService:
         )
 
         try:
-            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(preview["user_id"])
+            provider_photo_urls = await self.client_photo_service.get_provider_photo_urls(
+                preview["user_id"],
+                selected_photo_types=selected_photo_types,
+            )
             provider_response = await self.higgsfield_client.generate_image(
                 prompt=next_prompt,
                 aspect_ratio=next_aspect_ratio,

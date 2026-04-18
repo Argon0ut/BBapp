@@ -31,6 +31,7 @@ async def create_hairstyle_preview(
             prompt=data.text_prompt,
             aspect_ratio=data.aspect_ratio,
             resolution=data.resolution,
+            selected_photo_types=data.selected_photo_types,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -74,6 +75,7 @@ async def regenerate_hairstyle_preview(
             text_prompt=data.text_prompt,
             aspect_ratio=data.aspect_ratio,
             resolution=data.resolution,
+            selected_photo_types=data.selected_photo_types,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

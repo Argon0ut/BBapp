@@ -75,6 +75,23 @@ class ClientPhotoService:
             key=lambda photo: _PHOTO_TYPE_ORDER.get(str(photo.photo_type), 999),
         )
 
+    @staticmethod
+    def _normalize_selected_photo_types(
+        selected_photo_types: Iterable[ClientPhotoType | str] | None,
+    ) -> list[ClientPhotoType] | None:
+        if selected_photo_types is None:
+            return None
+
+        normalized: list[ClientPhotoType] = []
+        seen: set[ClientPhotoType] = set()
+        for photo_type in selected_photo_types:
+            normalized_type = ClientPhotoType(str(photo_type))
+            if normalized_type in seen:
+                continue
+            seen.add(normalized_type)
+            normalized.append(normalized_type)
+        return normalized
+
     async def _serialize_photo(self, photo: ClientPhoto) -> dict:
         file_name = self.image_storage_service.extract_file_name(photo.file_name)
         return {
@@ -190,8 +207,22 @@ class ClientPhotoService:
             token=token,
         )
 
-    async def get_provider_photo_urls(self, user_id: int) -> list[str]:
+    async def get_provider_photo_urls(
+        self,
+        user_id: int,
+        selected_photo_types: Iterable[ClientPhotoType | str] | None = None,
+    ) -> list[str]:
         photos = self._sort_photos(await self.client_photos_repo.get_one(user_id))
+        normalized_selected_photo_types = self._normalize_selected_photo_types(selected_photo_types)
+        if normalized_selected_photo_types is not None:
+            allowed_photo_types = set(normalized_selected_photo_types)
+            photos = [
+                photo for photo in photos
+                if ClientPhotoType(photo.photo_type) in allowed_photo_types
+            ]
+            if not photos:
+                raise ValueError("Selected photos were not found for this user")
+
         urls: list[str] = []
         for photo in photos:
             if self.image_storage_service.enabled:
