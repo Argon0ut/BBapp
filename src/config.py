@@ -27,8 +27,8 @@ class Settings(BaseModel):
         ).split(",")
         if origin.strip()
     ]
-    aws_access_key: str = os.getenv("AWS_ACCESS_KEY", os.getenv("AWS_ACCESS_KEY_ID", ""))
-    aws_secret_key: str = os.getenv("AWS_SECRET_KEY", os.getenv("AWS_SECRET_ACCESS_KEY", ""))
+    aws_access_key: str = os.getenv("AWS_ACCESS_KEY", os.getenv("AWS_ACCESS_KEY", ""))
+    aws_secret_key: str = os.getenv("AWS_SECRET_KEY", os.getenv("AWS_SECRET_KEY", ""))
     aws_region: str = os.getenv("AWS_REGION", "")
     aws_bucket_name: str = os.getenv("AWS_BUCKET_NAME", "").strip().strip("\"'")
     aws_public_base_url: str = os.getenv("AWS_PUBLIC_BASE_URL", "").rstrip("/")

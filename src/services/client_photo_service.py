@@ -20,15 +20,23 @@ class ClientPhotoService:
         self.client_photos_repo = client_photos_repo
         self.image_storage_service = image_storage_service
 
-    async def _serialize_photo(self, photo: ClientPhoto) -> dict:
-        file_name = self.image_storage_service.extract_file_name(photo.file_name)
+    def _resolve_lookup_key(self, photo: ClientPhoto) -> str:
+        stored_key = self.image_storage_service.extract_key_from_stored_value(photo.file_name)
         if self.image_storage_service.enabled:
-            lookup_key = self.image_storage_service.build_client_photo_key(
+            if stored_key and "/" in stored_key:
+                return stored_key
+            file_name = self.image_storage_service.extract_file_name(photo.file_name)
+            return self.image_storage_service.build_client_photo_key(
                 user_id=photo.user_id,
                 file_name=file_name,
             )
-        else:
-            lookup_key = os.path.join(UPLOAD_DIR, file_name)
+
+        file_name = self.image_storage_service.extract_file_name(photo.file_name)
+        return os.path.join(UPLOAD_DIR, file_name)
+
+    async def _serialize_photo(self, photo: ClientPhoto) -> dict:
+        file_name = self.image_storage_service.extract_file_name(photo.file_name)
+        lookup_key = self._resolve_lookup_key(photo)
         file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
         return {
             "id": photo.id,
@@ -60,7 +68,7 @@ class ClientPhotoService:
 
         try:
             if self.image_storage_service.enabled:
-                file_name = await self.image_storage_service.upload_client_photo(
+                stored_value = await self.image_storage_service.upload_client_photo(
                     user_id=user_id,
                     photo_type=photo_type.value,
                     extension=extension,
@@ -69,8 +77,8 @@ class ClientPhotoService:
                 )
             else:
                 os.makedirs(UPLOAD_DIR, exist_ok=True)
-                file_name = f"{photo_type.value}_{user_id}.{extension}"
-                local_path = os.path.join(UPLOAD_DIR, file_name)
+                stored_value = f"{photo_type.value}_{user_id}.{extension}"
+                local_path = os.path.join(UPLOAD_DIR, stored_value)
                 with open(local_path, "wb") as f:
                     f.write(content)
         except OSError as exc:
@@ -86,7 +94,7 @@ class ClientPhotoService:
                 updated = await self.client_photos_repo.update_one(
                     existing.id,
                     {
-                        "file_name": file_name,
+                        "file_name": stored_value,
                     },
                 )
                 return await self._serialize_photo(updated)
@@ -94,7 +102,7 @@ class ClientPhotoService:
             data = {
                 "user_id": user_id,
                 "photo_type": photo_type.value,
-                "file_name": file_name,
+                "file_name": stored_value,
             }
             created = await self.client_photos_repo.add_one(data)
             return await self._serialize_photo(created)
@@ -107,13 +115,7 @@ class ClientPhotoService:
         res = []
         for photo in photos:
             file_name = self.image_storage_service.extract_file_name(photo.file_name)
-            if self.image_storage_service.enabled:
-                lookup_key = self.image_storage_service.build_client_photo_key(
-                    user_id=photo.user_id,
-                    file_name=file_name,
-                )
-            else:
-                lookup_key = os.path.join(UPLOAD_DIR, file_name)
+            lookup_key = self._resolve_lookup_key(photo)
             file_url = await self.image_storage_service.get_client_photo_url(lookup_key)
             res.append(
                 {

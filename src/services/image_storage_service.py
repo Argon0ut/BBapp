@@ -75,7 +75,7 @@ class ImageStorageService:
         file_name = f"{photo_type}_{uuid4().hex}.{extension}"
         key = self.build_client_photo_key(user_id=user_id, file_name=file_name)
         await self.upload_bytes(key=key, content=content, content_type=content_type)
-        return file_name
+        return key
 
     def build_client_photo_key(self, user_id: int, file_name: str) -> str:
         return f"{self.settings.s3_client_photo_prefix}/user_{user_id}/{file_name}"
@@ -110,19 +110,11 @@ class ImageStorageService:
             return ""
 
         if "://" not in raw_value:
-            return raw_value
+            return raw_value.lstrip("/")
 
         parsed = urlparse(raw_value)
-        return Path(parsed.path).name
+        return parsed.path.lstrip("/")
 
     @staticmethod
     def extract_file_name(stored_value: str | None) -> str:
-        raw_value = (stored_value or "").strip()
-        if not raw_value:
-            return ""
-
-        if "://" in raw_value:
-            parsed = urlparse(raw_value)
-            return Path(parsed.path).name
-
-        return Path(raw_value).name
+        return Path(ImageStorageService.extract_key_from_stored_value(stored_value)).name
