@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import boto3
 import httpx
+from botocore.config import Config
 
 from src.config import Settings
 
@@ -25,7 +26,9 @@ class ImageStorageService:
                 "s3",
                 aws_access_key_id=settings.aws_access_key,
                 aws_secret_access_key=settings.aws_secret_key,
+                aws_session_token=settings.aws_session_token or None,
                 region_name=settings.aws_region,
+                config=Config(signature_version="s3v4"),
             )
 
     @property

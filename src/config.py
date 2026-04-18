@@ -8,6 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _getenv_stripped(*names: str) -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None:
+            return value.strip().strip("\"'")
+    return ""
+
+
 class Settings(BaseModel):
     hf_api_key: str = os.getenv("HF_API_KEY", "")
     hf_secret_key: str = os.getenv("HF_SECRET_KEY", "")
@@ -27,13 +35,14 @@ class Settings(BaseModel):
         ).split(",")
         if origin.strip()
     ]
-    aws_access_key: str = os.getenv("AWS_ACCESS_KEY", os.getenv("AWS_ACCESS_KEY", ""))
-    aws_secret_key: str = os.getenv("AWS_SECRET_KEY", os.getenv("AWS_SECRET_KEY", ""))
-    aws_region: str = os.getenv("AWS_REGION", "")
-    aws_bucket_name: str = os.getenv("AWS_BUCKET_NAME", "").strip().strip("\"'")
-    aws_public_base_url: str = os.getenv("AWS_PUBLIC_BASE_URL", "").rstrip("/")
-    s3_client_photo_prefix: str = os.getenv("S3_CLIENT_PHOTO_PREFIX", "client-photos").strip("/")
-    s3_generated_photo_prefix: str = os.getenv("S3_GENERATED_PHOTO_PREFIX", "generated-images").strip("/")
+    aws_access_key: str = _getenv_stripped("AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY")
+    aws_secret_key: str = _getenv_stripped("AWS_SECRET_ACCESS_KEY", "AWS_SECRET_KEY")
+    aws_session_token: str = _getenv_stripped("AWS_SESSION_TOKEN")
+    aws_region: str = _getenv_stripped("AWS_REGION")
+    aws_bucket_name: str = _getenv_stripped("AWS_BUCKET_NAME")
+    aws_public_base_url: str = _getenv_stripped("AWS_PUBLIC_BASE_URL").rstrip("/")
+    s3_client_photo_prefix: str = (_getenv_stripped("S3_CLIENT_PHOTO_PREFIX") or "client-photos").strip("/")
+    s3_generated_photo_prefix: str = (_getenv_stripped("S3_GENERATED_PHOTO_PREFIX") or "generated-images").strip("/")
     s3_presigned_ttl_seconds: int = int(os.getenv("S3_PRESIGNED_TTL_SECONDS", "3600"))
 
     @property
