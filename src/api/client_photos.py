@@ -20,6 +20,11 @@ router = APIRouter(
     tags=["User Photos"],
 )
 
+legacy_router = APIRouter(
+    prefix="/clients/{user_id}/photos",
+    tags=["User Photos"],
+)
+
 
 @router.post("", response_model=ClientPhotoResponseSchema, status_code=201)
 async def upload_user_photo(
@@ -28,7 +33,12 @@ async def upload_user_photo(
     current_user: Annotated[AuthUser, Depends(get_current_user)],
     file: UploadFile = File(...),
 ):
-    return await client_photo_service.add_photo(current_user.id, photo_type, file)
+    try:
+        return await client_photo_service.add_photo(current_user.id, photo_type, file)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("", response_model=List[ClientPhotoAddressSchema], status_code=200)
@@ -48,3 +58,46 @@ async def get_photo_completeness_status(
     current_user: Annotated[AuthUser, Depends(get_current_user)],
 ):
     return await client_photo_service.get_status(current_user.id)
+
+
+@legacy_router.post("", response_model=ClientPhotoResponseSchema, status_code=201)
+async def upload_legacy_user_photo(
+    user_id: int,
+    photo_type: ClientPhotoType,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
+    try:
+        return await client_photo_service.add_photo(user_id, photo_type, file)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@legacy_router.get("", response_model=List[ClientPhotoAddressSchema], status_code=200)
+async def get_legacy_user_photos(
+    user_id: int,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
+    try:
+        return await client_photo_service.get_photos_by_user(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@legacy_router.get("/status", status_code=200, response_model=ClientPhotoCompletenessSchema)
+async def get_legacy_photo_completeness_status(
+    user_id: int,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
+    return await client_photo_service.get_status(user_id)
