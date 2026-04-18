@@ -1,4 +1,5 @@
 import asyncio
+import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -67,6 +68,21 @@ class ImageStorageService:
             ExpiresIn=self.settings.s3_presigned_ttl_seconds,
         )
 
+    async def get_client_photo_content(self, key: str) -> tuple[bytes, str]:
+        if self._client:
+            response = await asyncio.to_thread(
+                self._client.get_object,
+                Bucket=self.settings.aws_bucket_name,
+                Key=key,
+            )
+            body = await asyncio.to_thread(response["Body"].read)
+            content_type = response.get("ContentType") or self._guess_content_type(key)
+            return body, content_type
+
+        local_path = Path(key)
+        body = await asyncio.to_thread(local_path.read_bytes)
+        return body, self._guess_content_type(key)
+
     async def upload_client_photo(
         self,
         user_id: int,
@@ -82,6 +98,11 @@ class ImageStorageService:
 
     def build_client_photo_key(self, user_id: int, file_name: str) -> str:
         return f"{self.settings.s3_client_photo_prefix}/user_{user_id}/{file_name}"
+
+    @staticmethod
+    def _guess_content_type(path: str) -> str:
+        guessed, _ = mimetypes.guess_type(path)
+        return guessed or "application/octet-stream"
 
     async def mirror_generated_image(self, preview_id: int, source_url: str) -> str:
         if not self._client:

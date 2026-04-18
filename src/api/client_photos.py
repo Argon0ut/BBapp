@@ -1,6 +1,6 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from src.api.dependencies import (
     client_photo_service as client_photo_dependency,
@@ -62,6 +62,29 @@ async def get_photo_completeness_status(
     return await client_photo_service.get_status(current_user.id)
 
 
+@router.get("/{photo_type}/file")
+async def get_user_photo_file(
+    photo_type: ClientPhotoType,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    try:
+        content, content_type, file_name = await client_photo_service.get_photo_content(
+            user_id=current_user.id,
+            photo_type=photo_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{file_name}"'},
+    )
+
+
 @legacy_router.post("", response_model=ClientPhotoResponseSchema, status_code=201)
 async def upload_legacy_user_photo(
     user_id: int,
@@ -103,3 +126,30 @@ async def get_legacy_photo_completeness_status(
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
     return await client_photo_service.get_status(user_id)
+
+
+@legacy_router.get("/{photo_type}/file")
+async def get_legacy_user_photo_file(
+    user_id: int,
+    photo_type: ClientPhotoType,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
+
+    try:
+        content, content_type, file_name = await client_photo_service.get_photo_content(
+            user_id=user_id,
+            photo_type=photo_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{file_name}"'},
+    )

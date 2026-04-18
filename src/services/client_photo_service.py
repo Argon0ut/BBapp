@@ -126,6 +126,20 @@ class ClientPhotoService:
             )
         return res
 
+    async def get_photo_content(
+        self,
+        user_id: int,
+        photo_type: ClientPhotoType,
+    ) -> tuple[bytes, str, str]:
+        photo = await self.client_photos_repo.get_by_user_and_type(user_id, photo_type.value)
+        if not photo:
+            raise ValueError("Photo not found")
+
+        lookup_key = self._resolve_lookup_key(photo)
+        content, content_type = await self.image_storage_service.get_client_photo_content(lookup_key)
+        file_name = self.image_storage_service.extract_file_name(photo.file_name) or f"{photo_type.value}.jpg"
+        return content, content_type, file_name
+
     async def get_status(self, user_id: int):
         photos = await self.client_photos_repo.get_one(user_id)
         present = set()
