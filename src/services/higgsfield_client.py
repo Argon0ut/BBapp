@@ -35,7 +35,14 @@ class HiggsfieldClient:
             "resolution": resolution,
         }
         if image_urls:
-            payload["image_urls"] = image_urls
+            # Higgsfield's Cloud API expects a structured `input_images` array of
+            # `{type: "image_url", image_url: ...}` objects for multi-photo identity
+            # references. A flat list of strings under `image_urls` is silently
+            # ignored by the Soul endpoint, which is why only one photo was ever
+            # reflected in the generation.
+            payload["input_images"] = [
+                {"type": "image_url", "image_url": url} for url in image_urls
+            ]
         params = {"hf_webhook": webhook_url} if webhook_url else None
         model_id = self.settings.hf_image_model_id.strip().strip("/")
 

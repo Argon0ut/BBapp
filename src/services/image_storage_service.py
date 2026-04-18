@@ -109,6 +109,21 @@ class ImageStorageService:
     async def get_client_photo_url(self, key: str) -> str:
         return await self.get_object_url(key)
 
+    async def delete_client_photo(self, key: str) -> None:
+        if self._client:
+            await asyncio.to_thread(
+                self._client.delete_object,
+                Bucket=self.settings.aws_bucket_name,
+                Key=key,
+            )
+            return
+
+        local_path = Path(key)
+        try:
+            await asyncio.to_thread(local_path.unlink)
+        except FileNotFoundError:
+            return
+
     async def get_client_photo_content(self, key: str) -> tuple[bytes, str]:
         if self._client:
             response = await asyncio.to_thread(

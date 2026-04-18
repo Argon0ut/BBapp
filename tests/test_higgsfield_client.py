@@ -67,8 +67,8 @@ async def test_generate_image_uses_model_path_and_query_param_for_webhook(monkey
         "prompt": "short bob haircut",
         "aspect_ratio": "1:1",
         "resolution": "720p",
-        "image_urls": [
-            "https://storage.example/front.jpg",
-            "https://storage.example/right.jpg",
+        "input_images": [
+            {"type": "image_url", "image_url": "https://storage.example/front.jpg"},
+            {"type": "image_url", "image_url": "https://storage.example/right.jpg"},
         ],
     }

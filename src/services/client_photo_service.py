@@ -180,6 +180,33 @@ class ClientPhotoService:
             )
         return res
 
+    async def delete_photo(
+        self,
+        user_id: int,
+        photo_type: ClientPhotoType,
+    ) -> dict:
+        photo = await self.client_photos_repo.get_by_user_and_type(
+            user_id, photo_type.value
+        )
+        if not photo:
+            raise ValueError("Photo not found")
+
+        lookup_key = self._resolve_lookup_key(photo)
+        await self.client_photos_repo.delete_by_user_and_type(user_id, photo_type.value)
+
+        try:
+            await self.image_storage_service.delete_client_photo(lookup_key)
+        except Exception:
+            # The DB row is already gone; a stale object in storage is preferable
+            # to a 500 that leaves the UI thinking the delete failed.
+            pass
+
+        return {
+            "user_id": user_id,
+            "photo_type": photo_type,
+            "deleted": True,
+        }
+
     async def get_photo_content(
         self,
         user_id: int,

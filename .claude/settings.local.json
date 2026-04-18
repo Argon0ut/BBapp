@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.higgsfield.ai)",
+      "WebSearch",
+      "WebFetch(domain:platform.higgsfield.ai)",
+      "WebFetch(domain:wavespeed.ai)",
+      "WebFetch(domain:www.segmind.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:cloud.higgsfield.ai)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api *)",
+      "Bash(curl -s https://api.github.com/repos/higgsfield-ai/higgsfield-client/contents/src/higgsfield_client)",
+      "Bash(curl *)",
+      "Bash(python -m pytest tests/test_higgsfield_client.py tests/test_hairstyle_preview_service.py tests/test_hairstyle_preview_schema.py -v)",
+      "Bash(python3 -m pytest tests/test_higgsfield_client.py tests/test_hairstyle_preview_service.py tests/test_hairstyle_preview_schema.py -v)",
+      "Bash(python3 *)"
+    ]
+  }
+}

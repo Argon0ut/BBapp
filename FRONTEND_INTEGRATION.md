@@ -109,7 +109,55 @@ Recommended frontend behavior:
 
 - Upload at least one photo before enabling image generation.
 
-### 3. Check photo completeness
+### 3. Delete a single reference photo
+
+Endpoint (current, signed-in-user):
+
+`DELETE /users/me/photos/{photo_type}`
+
+Endpoint (legacy, explicit user id):
+
+`DELETE /clients/{user_id}/photos/{photo_type}`
+
+Path params:
+
+- `photo_type`: one of `front`, `rear`, `left`, `right`
+- `user_id` (legacy only): must equal the signed-in user's id
+
+Body: none.
+
+Success response — `200 OK`:
+
+```json
+{
+  "user_id": 1,
+  "photo_type": "front",
+  "deleted": true
+}
+```
+
+Error responses:
+
+- `401 Unauthorized` — no session
+- `403 Forbidden` — legacy route called with a `user_id` that does not match the signed-in user
+- `404 Not Found` — `{ "detail": "Photo not found" }` when no photo of that type exists for the user
+- `500 Internal Server Error` — `{ "detail": "..." }` only if the DB operation itself fails
+
+Backend behavior:
+
+- Removes the `client_photos` row for `(user_id, photo_type)`
+- Best-effort deletes the underlying object from S3 (or the local `uploads/client_photos/` file when S3 is not configured). A failure to delete the underlying file does not fail the request because the DB row is already gone and Higgsfield will no longer see the photo.
+- Returns a confirmation body that the frontend can use to update local state.
+
+Frontend usage flow:
+
+1. User taps "Remove" on a photo slot (e.g., the front photo).
+2. Frontend calls `DELETE /users/me/photos/front`.
+3. On `200`, the frontend clears that slot in local state and refetches `GET /users/me/photos/status` so the "ready to generate" flag updates correctly.
+4. On `404`, the photo was already gone server-side — clear the slot locally and continue.
+5. The next `POST /hairstyle-previews` / `POST /hairstyle-previews/{id}/regenerate` call will automatically send only the remaining photos to Higgsfield as `input_images`.
+
+### 4. Check photo completeness
 
 Endpoint:
 
@@ -133,6 +181,16 @@ Generation currently requires:
 - `partially_completed === true`
 
 That means at least one photo is uploaded.
+
+### Multi-photo identity references
+
+When `POST /hairstyle-previews` is called, the backend:
+
+1. Fetches every `client_photos` row for the signed-in user (or the subset listed in `selected_photo_types` if provided).
+2. Sends them to Higgsfield as an `input_images` array of `{ "type": "image_url", "image_url": "..." }` objects — the structured shape Higgsfield's Cloud API expects for multi-image identity references.
+3. Prepends an identity-locking instruction to the user's prompt so the model treats every attached photo as the same real person viewed from different angles.
+
+The frontend does not need to send image URLs itself. It only needs to keep the photo set current via upload/delete.
 
 ## Hairstyle preview generation API
 

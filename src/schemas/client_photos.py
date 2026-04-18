@@ -22,5 +22,10 @@ class ClientPhotoCompletenessSchema(BaseModel):
     partially_completed: bool = False
     complete: bool = False
 
+class ClientPhotoDeleteResponseSchema(BaseModel):
+    user_id: int
+    photo_type: ClientPhotoType
+    deleted: bool = True
+
 #Upload schema != response schema
 #Upload uses UploadFile, not pydantic

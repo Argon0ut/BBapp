@@ -8,6 +8,17 @@ from src.services.client_photo_service import ClientPhotoService
 from src.services.higgsfield_client import HiggsfieldClient
 from src.services.image_storage_service import ImageStorageService
 
+IDENTITY_PROMPT_PREFIX = (
+    "Identity lock: treat EVERY attached reference photo as the SAME single real "
+    "person, captured from multiple angles (front, rear, left, right). Fuse facial "
+    "structure, skin tone, eye color, hairline and body proportions across ALL "
+    "{photo_count} attached photos as one consistent identity. Do not blend with "
+    "any other person, do not invent features that are not present in the reference "
+    "set, and do not drop photos from consideration. Render a new hairstyle while "
+    "preserving this exact identity."
+)
+USER_PROMPT_PREFIX = "Hairstyle request: "
+
 
 class HairstylePreviewService:
     def __init__(
@@ -28,6 +39,17 @@ class HairstylePreviewService:
         if not self.settings.public_base_url:
             return None
         return f"{self.settings.public_base_url}/hairstyle-previews/webhooks/higgsfield-image"
+
+    @staticmethod
+    def _compose_provider_prompt(user_prompt: str, photo_count: int) -> str:
+        if photo_count <= 0:
+            return user_prompt
+        return (
+            IDENTITY_PROMPT_PREFIX.format(photo_count=photo_count)
+            + "\n\n"
+            + USER_PROMPT_PREFIX
+            + user_prompt.strip()
+        )
 
     def _map_provider_status(self, provider_status: str | None) -> HairstylePreviewStatus:
         normalized = str(provider_status or "").lower()
@@ -161,7 +183,7 @@ class HairstylePreviewService:
                 selected_photo_types=selected_photo_types,
             )
             provider_response = await self.higgsfield_client.generate_image(
-                prompt=prompt,
+                prompt=self._compose_provider_prompt(prompt, len(provider_photo_urls)),
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
                 webhook_url=self._build_webhook_url(),
@@ -267,7 +289,7 @@ class HairstylePreviewService:
                 selected_photo_types=selected_photo_types,
             )
             provider_response = await self.higgsfield_client.generate_image(
-                prompt=next_prompt,
+                prompt=self._compose_provider_prompt(next_prompt, len(provider_photo_urls)),
                 aspect_ratio=next_aspect_ratio,
                 resolution=next_resolution,
                 webhook_url=self._build_webhook_url(),

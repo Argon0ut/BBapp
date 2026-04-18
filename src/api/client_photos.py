@@ -11,6 +11,7 @@ from src.models.client_photos import ClientPhotoType
 from src.schemas.client_photos import (
     ClientPhotoAddressSchema,
     ClientPhotoCompletenessSchema,
+    ClientPhotoDeleteResponseSchema,
     ClientPhotoResponseSchema,
 )
 from src.services.client_photo_service import ClientPhotoService
@@ -60,6 +61,24 @@ async def get_photo_completeness_status(
     current_user: Annotated[AuthUser, Depends(get_current_user)],
 ):
     return await client_photo_service.get_status(current_user.id)
+
+
+@router.delete(
+    "/{photo_type}",
+    response_model=ClientPhotoDeleteResponseSchema,
+    status_code=200,
+)
+async def delete_user_photo(
+    photo_type: ClientPhotoType,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    try:
+        return await client_photo_service.delete_photo(current_user.id, photo_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/{photo_type}/file")
@@ -126,6 +145,27 @@ async def get_legacy_photo_completeness_status(
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
     return await client_photo_service.get_status(user_id)
+
+
+@legacy_router.delete(
+    "/{photo_type}",
+    response_model=ClientPhotoDeleteResponseSchema,
+    status_code=200,
+)
+async def delete_legacy_user_photo(
+    user_id: int,
+    photo_type: ClientPhotoType,
+    client_photo_service: Annotated[ClientPhotoService, Depends(client_photo_dependency)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Path user_id must match signed-in user")
+    try:
+        return await client_photo_service.delete_photo(user_id, photo_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @legacy_router.get("/{photo_type}/file")

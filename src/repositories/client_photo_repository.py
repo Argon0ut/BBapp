@@ -50,6 +50,17 @@ class ClientPhotosRepository(AbstractRepository):
         await self.session.commit()
         return {"success": True}
 
+    async def delete_by_user_and_type(
+        self, user_id: int, photo_type: str
+    ) -> ClientPhoto | None:
+        photo = await self.get_by_user_and_type(user_id, photo_type)
+        if not photo:
+            return None
+
+        await self.session.delete(photo)
+        await self.session.commit()
+        return photo
+
     async def update_one(self, photo_id: int, updated_data: dict) -> ClientPhoto | None:
         result = await self.session.execute(
             select(self.model).where(self.model.id == photo_id)

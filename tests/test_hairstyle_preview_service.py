@@ -174,16 +174,19 @@ async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
     )
 
     assert preview["status"] == HairstylePreviewStatus.QUEUED
-    assert higgsfield_client.last_generate_call == {
-        "prompt": "short bob haircut",
-        "aspect_ratio": "1:1",
-        "resolution": "720p",
-        "webhook_url": "https://app.example.com/hairstyle-previews/webhooks/higgsfield-image",
-        "image_urls": [
-            "https://storage.example/front.jpg",
-            "https://storage.example/right.jpg",
-        ],
-    }
+    call = higgsfield_client.last_generate_call
+    assert call["aspect_ratio"] == "1:1"
+    assert call["resolution"] == "720p"
+    assert call["webhook_url"] == (
+        "https://app.example.com/hairstyle-previews/webhooks/higgsfield-image"
+    )
+    assert call["image_urls"] == [
+        "https://storage.example/front.jpg",
+        "https://storage.example/right.jpg",
+    ]
+    assert "Identity lock" in call["prompt"]
+    assert "ALL 2 attached photos" in call["prompt"]
+    assert call["prompt"].endswith("Hairstyle request: short bob haircut")
 
 
 @pytest.mark.asyncio
