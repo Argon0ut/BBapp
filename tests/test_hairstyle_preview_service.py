@@ -17,51 +17,58 @@ class StubClientPhotoService:
     async def get_status(self, user_id: int) -> dict:
         return {"partially_completed": True}
 
-    async def get_provider_photo_urls(self, user_id: int, selected_photo_types=None) -> list[str]:
+    async def get_provider_photo_contents(
+        self,
+        user_id: int,
+        selected_photo_types=None,
+    ) -> list[tuple[bytes, str, str]]:
         self.last_selected_photo_types = selected_photo_types
         return [
-            "https://storage.example/front.jpg",
-            "https://storage.example/right.jpg",
+            (b"front-bytes", "image/jpeg", "front.jpg"),
+            (b"right-bytes", "image/png", "right.png"),
         ]
 
 
-class StubHiggsfieldClient:
-    def __init__(self, status_payload: dict | None = None):
-        self.status_payload = status_payload or {}
+class StubOpenAIImageClient:
+    def __init__(self, exc: Exception | None = None):
+        self.exc = exc
         self.last_generate_call = None
 
     async def generate_image(
         self,
         prompt: str,
-        aspect_ratio: str,
-        resolution: str,
-        webhook_url: str | None,
-        image_urls: list[str] | None = None,
+        image_contents: list[tuple[bytes, str, str]],
+        aspect_ratio: str | None = None,
     ) -> dict:
         self.last_generate_call = {
             "prompt": prompt,
+            "image_contents": image_contents,
             "aspect_ratio": aspect_ratio,
-            "resolution": resolution,
-            "webhook_url": webhook_url,
-            "image_urls": image_urls,
         }
+        if self.exc:
+            raise self.exc
         return {
-            "request_id": "req-1",
-            "status": "queued",
-            "status_url": "https://platform.higgsfield.ai/requests/req-1/status",
-            "cancel_url": "https://platform.higgsfield.ai/requests/req-1/cancel",
+            "content": b"generated-image-bytes",
+            "content_type": "image/png",
         }
-
-    async def get_request_status(self, status_url: str) -> dict:
-        return self.status_payload
-
-    async def cancel_image(self, cancel_url: str) -> dict:
-        return {"ok": True}
 
 
 class StubImageStorageService:
-    async def mirror_generated_image(self, preview_id: int, source_url: str) -> str:
-        return f"https://cdn.example/generated/{preview_id}.jpg"
+    def __init__(self):
+        self.last_store_call = None
+
+    async def store_generated_image_bytes(
+        self,
+        preview_id: int,
+        content: bytes,
+        content_type: str,
+    ) -> str:
+        self.last_store_call = {
+            "preview_id": preview_id,
+            "content": content,
+            "content_type": content_type,
+        }
+        return f"https://cdn.example/generated/{preview_id}.png"
 
     async def refresh_managed_storage_url(
         self,
@@ -82,23 +89,30 @@ async def clean_preview_repo():
     await repo.clear()
 
 
-def _build_service(status_payload: dict | None = None) -> tuple[HairstylePreviewService, HairstylePreviewRepository]:
+def _build_service(
+    openai_exc: Exception | None = None,
+) -> tuple[
+    HairstylePreviewService,
+    HairstylePreviewRepository,
+    StubOpenAIImageClient,
+    StubClientPhotoService,
+    StubImageStorageService,
+]:
     repo = HairstylePreviewRepository()
-    higgsfield_client = StubHiggsfieldClient(status_payload=status_payload)
+    openai_image_client = StubOpenAIImageClient(exc=openai_exc)
     client_photo_service = StubClientPhotoService()
+    image_storage_service = StubImageStorageService()
     settings = SimpleNamespace(
-        public_base_url="https://app.example.com",
-        has_higgsfield_credentials=True,
         s3_generated_photo_prefix="generated-images",
     )
     service = HairstylePreviewService(
         repo=repo,
         client_photo_service=client_photo_service,
-        higgsfield_client=higgsfield_client,
-        image_storage_service=StubImageStorageService(),
+        openai_image_client=openai_image_client,
+        image_storage_service=image_storage_service,
         settings=settings,
     )
-    return service, repo, higgsfield_client, client_photo_service
+    return service, repo, openai_image_client, client_photo_service, image_storage_service
 
 
 def _build_preview_request() -> dict:
@@ -107,13 +121,13 @@ def _build_preview_request() -> dict:
         "id": 1,
         "user_id": 42,
         "text_prompt": "short bob haircut",
-        "status": HairstylePreviewStatus.QUEUED,
+        "status": HairstylePreviewStatus.COMPLETED,
         "aspect_ratio": "1:1",
         "resolution": "720p",
         "generation_count": 1,
-        "provider_request_id": "req-1",
-        "status_url": "https://platform.higgsfield.ai/requests/req-1/status",
-        "cancel_url": "https://platform.higgsfield.ai/requests/req-1/cancel",
+        "provider_request_id": None,
+        "status_url": None,
+        "cancel_url": None,
         "generated_image_url": None,
         "approved_image_url": None,
         "error": None,
@@ -123,66 +137,27 @@ def _build_preview_request() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_webhook_handles_top_level_completed_images():
-    service, repo, _, _ = _build_service()
-    await repo.add(_build_preview_request())
-
-    response = await service.handle_higgsfield_webhook(
-        {
-            "status": "completed",
-            "request_id": "req-1",
-            "images": [{"url": "https://images.example/result.jpg"}],
-        }
-    )
-
-    preview = await repo.get(1)
-
-    assert response == {"ok": True}
-    assert preview["status"] == HairstylePreviewStatus.COMPLETED
-    assert preview["generated_image_url"] == "https://cdn.example/generated/1.jpg"
-    assert preview["error"] is None
-
-
-@pytest.mark.asyncio
-async def test_get_preview_reconciles_provider_status_from_status_url():
-    service, repo, _, _ = _build_service(
-        status_payload={
-            "status": "completed",
-            "request_id": "req-1",
-            "status_url": "https://platform.higgsfield.ai/requests/req-1/status",
-            "cancel_url": "https://platform.higgsfield.ai/requests/req-1/cancel",
-            "images": [{"url": "https://images.example/result.jpg"}],
-        }
-    )
-    await repo.add(_build_preview_request())
-
-    preview = await service.get_preview(1)
-
-    assert preview is not None
-    assert preview["status"] == HairstylePreviewStatus.COMPLETED
-    assert preview["generated_image_url"] == "https://cdn.example/generated/1.jpg"
-    assert preview["status_url"] == "https://platform.higgsfield.ai/requests/req-1/status"
-
-
-@pytest.mark.asyncio
-async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
-    service, _, higgsfield_client, _ = _build_service()
+async def test_create_preview_generates_and_stores_image_bytes():
+    service, _, openai_image_client, _, image_storage_service = _build_service()
 
     preview = await service.create_preview(
         user_id=42,
         prompt="short bob haircut",
     )
 
-    assert preview["status"] == HairstylePreviewStatus.QUEUED
-    call = higgsfield_client.last_generate_call
+    assert preview["status"] == HairstylePreviewStatus.COMPLETED
+    assert preview["generated_image_url"] == "https://cdn.example/generated/0.png"
+    assert image_storage_service.last_store_call == {
+        "preview_id": 0,
+        "content": b"generated-image-bytes",
+        "content_type": "image/png",
+    }
+
+    call = openai_image_client.last_generate_call
     assert call["aspect_ratio"] == "1:1"
-    assert call["resolution"] == "720p"
-    assert call["webhook_url"] == (
-        "https://app.example.com/hairstyle-previews/webhooks/higgsfield-image"
-    )
-    assert call["image_urls"] == [
-        "https://storage.example/front.jpg",
-        "https://storage.example/right.jpg",
+    assert call["image_contents"] == [
+        (b"front-bytes", "image/jpeg", "front.jpg"),
+        (b"right-bytes", "image/png", "right.png"),
     ]
     assert "HAIR-ONLY EDIT" in call["prompt"]
     assert "2 attached photos" in call["prompt"]
@@ -198,10 +173,24 @@ async def test_create_preview_passes_uploaded_photo_urls_to_higgsfield():
 
 
 @pytest.mark.asyncio
+async def test_create_preview_marks_blocked_for_policy_errors():
+    service, _, _, _, _ = _build_service(
+        openai_exc=RuntimeError("OpenAI image generation failed: content policy violation")
+    )
+
+    preview = await service.create_preview(
+        user_id=42,
+        prompt="short bob haircut",
+    )
+
+    assert preview["status"] == HairstylePreviewStatus.BLOCKED
+    assert "content policy violation" in preview["error"]
+
+
+@pytest.mark.asyncio
 async def test_get_preview_refreshes_managed_s3_urls():
-    service, repo, _, _ = _build_service()
+    service, repo, _, _, _ = _build_service()
     preview_request = _build_preview_request()
-    preview_request["status"] = HairstylePreviewStatus.COMPLETED
     preview_request["generated_image_url"] = (
         "https://bb-app-s3.s3.eu-north-1.amazonaws.com/generated-images/preview_1.jpg"
     )
@@ -214,7 +203,7 @@ async def test_get_preview_refreshes_managed_s3_urls():
 
 @pytest.mark.asyncio
 async def test_create_preview_passes_selected_photo_types_to_client_photo_service():
-    service, _, _, client_photo_service = _build_service()
+    service, _, _, client_photo_service, _ = _build_service()
 
     await service.create_preview(
         user_id=42,
@@ -226,3 +215,19 @@ async def test_create_preview_passes_selected_photo_types_to_client_photo_servic
         ClientPhotoType.FRONT,
         ClientPhotoType.REAR,
     ]
+
+
+@pytest.mark.asyncio
+async def test_regenerate_preview_replaces_image_and_increments_generation_count():
+    service, repo, _, _, _ = _build_service()
+    await repo.add(_build_preview_request())
+
+    preview = await service.regenerate_preview(
+        preview_id=1,
+        text_prompt="low taper fade",
+    )
+
+    assert preview["status"] == HairstylePreviewStatus.COMPLETED
+    assert preview["generation_count"] == 2
+    assert preview["text_prompt"] == "low taper fade"
+    assert preview["generated_image_url"] == "https://cdn.example/generated/1.png"

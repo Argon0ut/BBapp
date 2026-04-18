@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import boto3
-import httpx
 from botocore.config import Config
 
 from src.config import Settings
@@ -19,6 +18,8 @@ _EXT_BY_CONTENT_TYPE = {
     "image/png": "png",
     "image/webp": "webp",
 }
+_LOCAL_GENERATED_DIR = Path("generated_images")
+_LOCAL_GENERATED_ROUTE_PREFIX = "/generated-images"
 
 
 class ImageStorageService:
@@ -62,7 +63,7 @@ class ImageStorageService:
 
     def _media_signing_secret(self) -> bytes:
         raw_secret = (
-            self.settings.hf_secret_key
+            self.settings.openai_api_key
             or self.settings.aws_secret_key
             or self.settings.aws_access_key
         )
@@ -155,33 +156,52 @@ class ImageStorageService:
     def build_client_photo_key(self, user_id: int, file_name: str) -> str:
         return f"{self.settings.s3_client_photo_prefix}/user_{user_id}/{file_name}"
 
+    def _resolve_generated_extension(self, content_type: str, file_name: str | None = None) -> tuple[str, str]:
+        normalized_content_type = (content_type or "image/png").split(";")[0].strip().lower()
+        extension = _EXT_BY_CONTENT_TYPE.get(normalized_content_type)
+        if not extension and file_name:
+            extension = Path(file_name).suffix.lower().lstrip(".")
+        if not extension:
+            extension = "png"
+        if normalized_content_type == "application/octet-stream":
+            normalized_content_type = f"image/{extension if extension != 'jpg' else 'jpeg'}"
+        return extension, normalized_content_type
+
+    def _build_local_generated_image_url(self, file_name: str) -> str:
+        relative_url = f"{_LOCAL_GENERATED_ROUTE_PREFIX}/{file_name}"
+        base_url = self.settings.public_base_url.rstrip("/")
+        return f"{base_url}{relative_url}" if base_url else relative_url
+
+    async def store_generated_image_bytes(
+        self,
+        preview_id: int,
+        content: bytes,
+        content_type: str,
+    ) -> str:
+        extension, normalized_content_type = self._resolve_generated_extension(content_type)
+
+        if self._client:
+            key = (
+                f"{self.settings.s3_generated_photo_prefix}/"
+                f"preview_{preview_id}_{uuid4().hex}.{extension}"
+            )
+            await self.upload_bytes(
+                key=key,
+                content=content,
+                content_type=normalized_content_type,
+            )
+            return await self.get_object_url(key)
+
+        _LOCAL_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+        file_name = f"preview_{preview_id}_{uuid4().hex}.{extension}"
+        local_path = _LOCAL_GENERATED_DIR / file_name
+        await asyncio.to_thread(local_path.write_bytes, content)
+        return self._build_local_generated_image_url(file_name)
+
     @staticmethod
     def _guess_content_type(path: str) -> str:
         guessed, _ = mimetypes.guess_type(path)
         return guessed or "application/octet-stream"
-
-    async def mirror_generated_image(self, preview_id: int, source_url: str) -> str:
-        if not self._client:
-            return source_url
-
-        async with httpx.AsyncClient(timeout=self.settings.hf_webhook_timeout_seconds) as client:
-            response = await client.get(source_url)
-            response.raise_for_status()
-
-        raw_content_type = response.headers.get("content-type", "image/jpeg")
-        content_type = raw_content_type.split(";")[0].strip().lower()
-        extension = _EXT_BY_CONTENT_TYPE.get(content_type)
-
-        if not extension:
-            extension = Path(source_url).suffix.lower().lstrip(".") or "jpg"
-            content_type = f"image/{extension if extension != 'jpg' else 'jpeg'}"
-
-        key = (
-            f"{self.settings.s3_generated_photo_prefix}/"
-            f"preview_{preview_id}_{uuid4().hex}.{extension}"
-        )
-        await self.upload_bytes(key=key, content=response.content, content_type=content_type)
-        return await self.get_object_url(key)
 
     def is_managed_storage_url(
         self,

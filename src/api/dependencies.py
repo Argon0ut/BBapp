@@ -16,7 +16,7 @@ from src.services.image_storage_service import ImageStorageService
 
 from src.repositories.hairstyle_preview_repository import HairstylePreviewRepository
 from src.services.hairstyle_preview_service import HairstylePreviewService
-from src.services.higgsfield_client import HiggsfieldClient
+from src.services.openai_image_client import OpenAIImageClient
 
 
 async def auth_service(
@@ -84,12 +84,12 @@ async def hairstyle_preview_service(
 ) -> HairstylePreviewService:
     repo = HairstylePreviewRepository()
     settings = get_settings()
-    higgsfield_client = HiggsfieldClient(settings)
+    openai_image_client = OpenAIImageClient(settings)
     image_storage = ImageStorageService(settings)
     return HairstylePreviewService(
         repo,
         photo_service,
-        higgsfield_client,
+        openai_image_client,
         image_storage,
         settings,
     )

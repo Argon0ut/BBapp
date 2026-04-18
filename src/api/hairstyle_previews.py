@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.dependencies import (
     hairstyle_preview_service as hairstyle_preview_dependency,
@@ -79,7 +79,7 @@ async def regenerate_hairstyle_preview(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    return {"ok": True, "message": "Preview regeneration started", "preview": preview}
+    return {"ok": True, "message": "Preview regenerated", "preview": preview}
 
 
 @router.post("/{preview_id}/cancel", response_model=PreviewActionResponseSchema)
@@ -93,11 +93,3 @@ async def cancel_hairstyle_preview(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {"ok": True, "message": "Preview cancelled", "preview": preview}
-
-
-@router.post("/webhooks/higgsfield-image")
-async def higgsfield_image_webhook(
-    payload: dict = Body(...),
-    service: Annotated[HairstylePreviewService, Depends(hairstyle_preview_dependency)] = None,
-):
-    return await service.handle_higgsfield_webhook(payload)

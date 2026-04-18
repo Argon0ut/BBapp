@@ -61,12 +61,9 @@ _AWS_ACCESS_KEY, _AWS_SECRET_KEY = _resolve_aws_credentials()
 
 
 class Settings(BaseModel):
-    hf_api_key: str = os.getenv("HF_API_KEY", "")
-    hf_secret_key: str = os.getenv("HF_SECRET_KEY", "")
+    openai_api_key: str = _getenv_stripped("OPENAI_API_KEY")
+    openai_image_model: str = _getenv_stripped("OPENAI_IMAGE_MODEL") or "gpt-image-1"
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-    hf_image_model_id: str = os.getenv("HF_IMAGE_MODEL_ID", "higgsfield-ai/soul/standard")
-    hf_timeout_seconds: float = float(os.getenv("HF_TIMEOUT_SECONDS", "30"))
-    hf_webhook_timeout_seconds: float = float(os.getenv("HF_WEBHOOK_TIMEOUT_SECONDS", "60"))
     session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
     session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "session_token")
     session_cookie_samesite: str = os.getenv("SESSION_COOKIE_SAMESITE", "none")
@@ -90,8 +87,8 @@ class Settings(BaseModel):
     s3_presigned_ttl_seconds: int = int(os.getenv("S3_PRESIGNED_TTL_SECONDS", "3600"))
 
     @property
-    def has_higgsfield_credentials(self) -> bool:
-        return bool(self.hf_api_key and self.hf_secret_key)
+    def has_openai_credentials(self) -> bool:
+        return bool(self.openai_api_key)
 
     @property
     def has_s3_credentials(self) -> bool:
@@ -101,10 +98,6 @@ class Settings(BaseModel):
             and self.aws_region
             and self.aws_bucket_name
         )
-
-    @property
-    def authorization_header(self) -> str:
-        return f"Key {self.hf_api_key}:{self.hf_secret_key}"
 
 
 @lru_cache
