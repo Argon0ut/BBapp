@@ -45,8 +45,8 @@ async def login(
         key=settings.session_cookie_name,
         value=session_token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=settings.session_cookie_secure,
+        samesite=settings.session_cookie_samesite,
         max_age=settings.session_ttl_hours * 3600,
     )
 
@@ -65,7 +65,12 @@ async def logout(
 ):
     settings = get_settings()
     await service.logout(session_token)
-    response.delete_cookie(settings.session_cookie_name)
+    response.delete_cookie(
+        settings.session_cookie_name,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite=settings.session_cookie_samesite,
+    )
     return {"ok": True, "message": "Logged out"}
 
 

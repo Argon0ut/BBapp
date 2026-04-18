@@ -12,9 +12,14 @@ class Settings(BaseModel):
     hf_timeout_seconds: float = float(os.getenv("HF_TIMEOUT_SECONDS", "30"))
     session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
     session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "session_token")
+    session_cookie_samesite: str = os.getenv("SESSION_COOKIE_SAMESITE", "none")
+    session_cookie_secure: bool = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
     cors_allowed_origins: list[str] = [
         origin.strip().rstrip("/")
-        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        for origin in os.getenv(
+            "CORS_ALLOWED_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
         if origin.strip()
     ]
 
