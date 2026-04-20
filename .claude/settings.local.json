@@ -14,7 +14,8 @@
       "Bash(curl *)",
       "Bash(python -m pytest tests/test_higgsfield_client.py tests/test_hairstyle_preview_service.py tests/test_hairstyle_preview_schema.py -v)",
       "Bash(python3 -m pytest tests/test_higgsfield_client.py tests/test_hairstyle_preview_service.py tests/test_hairstyle_preview_schema.py -v)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(python -m pytest tests/test_client_photo_service.py -q)"
     ]
   }
 }

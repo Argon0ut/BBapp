@@ -41,7 +41,12 @@ class ClientPhotoService:
         file_name = self.image_storage_service.extract_file_name(photo.file_name)
         return os.path.join(UPLOAD_DIR, file_name)
 
-    def _build_file_url(self, photo: ClientPhoto) -> str:
+    async def _build_file_url(self, photo: ClientPhoto) -> str:
+        if self.image_storage_service.enabled:
+            return await self.image_storage_service.get_client_photo_url(
+                self._resolve_lookup_key(photo)
+            )
+
         photo_type = ClientPhotoType(photo.photo_type).value
         path = f"/clients/{photo.user_id}/photos/{photo_type}/file"
         base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
@@ -99,7 +104,7 @@ class ClientPhotoService:
             "user_id": photo.user_id,
             "photo_type": ClientPhotoType(photo.photo_type),
             "file_name": file_name,
-            "file_url": self._build_file_url(photo),
+            "file_url": await self._build_file_url(photo),
         }
 
     async def add_photo(
@@ -175,7 +180,7 @@ class ClientPhotoService:
                 {
                     "photo_type": ClientPhotoType(photo.photo_type),
                     "file_name": file_name,
-                    "file_url": self._build_file_url(photo),
+                    "file_url": await self._build_file_url(photo),
                 }
             )
         return res
