@@ -10,6 +10,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from dotenv import load_dotenv
+from src.db.url import get_database_url
 load_dotenv()
 
 # this is the Alembic Config object, which provides
@@ -17,10 +18,7 @@ load_dotenv()
 config = context.config
 
 
-db_url = os.getenv("DB_URL")
-
-if not db_url:
-    raise ValueError("DB_URL is not set in the Alembic")
+db_url = get_database_url()
 
 config.set_main_option("sqlalchemy.url", db_url)
 
