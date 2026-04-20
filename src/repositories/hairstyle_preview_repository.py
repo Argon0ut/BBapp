@@ -24,12 +24,6 @@ class HairstylePreviewRepository:
                 return deepcopy(request)
         return None
 
-    async def get_by_provider_request_id(self, provider_request_id: str):
-        for request in _preview_requests:
-            if request.get("provider_request_id") == provider_request_id:
-                return deepcopy(request)
-        return None
-
     async def clear(self):
         _preview_requests.clear()
 

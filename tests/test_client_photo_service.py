@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 from src.services.client_photo_service import ClientPhotoService
@@ -11,6 +12,7 @@ class DummyImageStorageService:
         *,
         enabled: bool = False,
         s3_url: str = "",
+        photo_content: dict[str, tuple[bytes, str]] | None = None,
     ):
         self.settings = SimpleNamespace(
             public_base_url=public_base_url,
@@ -18,18 +20,12 @@ class DummyImageStorageService:
         )
         self.enabled = enabled
         self._s3_url = s3_url
-
-    def build_signed_media_expires_at(self) -> int:
-        return 1234567890
-
-    def build_signed_media_token(self, subject: str, expires_at: int) -> str:
-        return f"token-for:{subject}:{expires_at}"
+        self._photo_content = photo_content or {}
 
     def extract_key_from_stored_value(self, stored_value):
         return (stored_value or "").lstrip("/")
 
     def extract_file_name(self, stored_value):
-        from pathlib import Path
         return Path(self.extract_key_from_stored_value(stored_value)).name
 
     def build_client_photo_key(self, user_id: int, file_name: str) -> str:
@@ -37,6 +33,9 @@ class DummyImageStorageService:
 
     async def get_client_photo_url(self, key: str) -> str:
         return self._s3_url
+
+    async def get_client_photo_content(self, key: str) -> tuple[bytes, str]:
+        return self._photo_content.get(key, (b"", "application/octet-stream"))
 
 
 def test_build_file_url_uses_public_base_url():
@@ -81,14 +80,42 @@ def test_build_file_url_returns_s3_url_when_storage_enabled():
     assert asyncio.run(service._build_file_url(photo)) == s3_url
 
 
-def test_build_provider_file_url_uses_signed_public_path():
-    service = ClientPhotoService(
-        client_photos_repo=None,
-        image_storage_service=DummyImageStorageService("https://api.example.com/"),
-    )
-    photo = SimpleNamespace(user_id=7, photo_type="front", file_name="front.png")
+class StubClientPhotosRepo:
+    def __init__(self, photos):
+        self._photos = photos
 
-    assert service._build_provider_file_url(photo) == (
-        "https://api.example.com/clients/7/photos/front/provider-file"
-        "?expires_at=1234567890&token=token-for:client-photo:7:front:1234567890"
+    async def get_one(self, user_id):
+        return [photo for photo in self._photos if photo.user_id == user_id]
+
+
+def test_get_provider_photo_payloads_returns_bytes_for_each_photo():
+    photos = [
+        SimpleNamespace(
+            user_id=7,
+            photo_type="front",
+            file_name="client-photos/user_7/front.png",
+        ),
+        SimpleNamespace(
+            user_id=7,
+            photo_type="right",
+            file_name="client-photos/user_7/right.png",
+        ),
+    ]
+    storage = DummyImageStorageService(
+        enabled=True,
+        photo_content={
+            "client-photos/user_7/front.png": (b"front-bytes", "image/png"),
+            "client-photos/user_7/right.png": (b"right-bytes", "image/png"),
+        },
     )
+    service = ClientPhotoService(
+        client_photos_repo=StubClientPhotosRepo(photos),
+        image_storage_service=storage,
+    )
+
+    payloads = asyncio.run(service.get_provider_photo_payloads(user_id=7))
+
+    assert payloads == [
+        ("front.png", b"front-bytes", "image/png"),
+        ("right.png", b"right-bytes", "image/png"),
+    ]

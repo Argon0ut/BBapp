@@ -1,14 +1,10 @@
 import asyncio
-import hashlib
-import hmac
 import mimetypes
-import time
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import boto3
-import httpx
 from botocore.config import Config
 
 from src.config import Settings
@@ -59,39 +55,6 @@ class ImageStorageService:
             Params={"Bucket": self.settings.aws_bucket_name, "Key": key},
             ExpiresIn=self.settings.s3_presigned_ttl_seconds,
         )
-
-    def _media_signing_secret(self) -> bytes:
-        raw_secret = (
-            self.settings.hf_secret_key
-            or self.settings.aws_secret_key
-            or self.settings.aws_access_key
-        )
-        if not raw_secret:
-            raise RuntimeError("A secret is required to sign media URLs")
-        return raw_secret.encode("utf-8")
-
-    def build_signed_media_expires_at(self) -> int:
-        return int(time.time()) + self.settings.s3_presigned_ttl_seconds
-
-    def build_signed_media_token(self, subject: str, expires_at: int) -> str:
-        payload = f"{subject}:{expires_at}".encode("utf-8")
-        return hmac.new(
-            self._media_signing_secret(),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
-
-    def verify_signed_media_token(
-        self,
-        subject: str,
-        expires_at: int,
-        token: str | None,
-    ) -> bool:
-        if not token or expires_at < int(time.time()):
-            return False
-
-        expected = self.build_signed_media_token(subject=subject, expires_at=expires_at)
-        return hmac.compare_digest(token, expected)
 
     async def upload_bytes(self, key: str, content: bytes, content_type: str) -> str:
         if not self._client:
@@ -160,28 +123,28 @@ class ImageStorageService:
         guessed, _ = mimetypes.guess_type(path)
         return guessed or "application/octet-stream"
 
-    async def mirror_generated_image(self, preview_id: int, source_url: str) -> str:
-        if not self._client:
-            return source_url
+    async def store_generated_image(
+        self,
+        preview_id: int,
+        content: bytes,
+        content_type: str = "image/png",
+    ) -> str:
+        normalized_type = (content_type or "image/png").split(";")[0].strip().lower()
+        extension = _EXT_BY_CONTENT_TYPE.get(normalized_type, "png")
 
-        async with httpx.AsyncClient(timeout=self.settings.hf_webhook_timeout_seconds) as client:
-            response = await client.get(source_url)
-            response.raise_for_status()
-
-        raw_content_type = response.headers.get("content-type", "image/jpeg")
-        content_type = raw_content_type.split(";")[0].strip().lower()
-        extension = _EXT_BY_CONTENT_TYPE.get(content_type)
-
-        if not extension:
-            extension = Path(source_url).suffix.lower().lstrip(".") or "jpg"
-            content_type = f"image/{extension if extension != 'jpg' else 'jpeg'}"
-
-        key = (
+        relative_path = (
             f"{self.settings.s3_generated_photo_prefix}/"
             f"preview_{preview_id}_{uuid4().hex}.{extension}"
         )
-        await self.upload_bytes(key=key, content=response.content, content_type=content_type)
-        return await self.get_object_url(key)
+
+        if self._client:
+            await self.upload_bytes(key=relative_path, content=content, content_type=normalized_type)
+            return await self.get_object_url(relative_path)
+
+        local_path = Path(relative_path)
+        await asyncio.to_thread(local_path.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(local_path.write_bytes, content)
+        return str(local_path)
 
     def is_managed_storage_url(
         self,

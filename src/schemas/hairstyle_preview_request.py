@@ -64,9 +64,6 @@ class HairstylePreviewRequestSchema(BaseModel):
     aspect_ratio: str
     resolution: str
     generation_count: int
-    provider_request_id: str | None = None
-    status_url: str | None = None
-    cancel_url: str | None = None
     generated_image_url: str | None = None
     approved_image_url: str | None = None
     error: str | None = None

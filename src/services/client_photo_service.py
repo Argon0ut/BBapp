@@ -52,27 +52,6 @@ class ClientPhotoService:
         base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
         return f"{base_url}{path}" if base_url else path
 
-    def _build_provider_subject(self, user_id: int, photo_type: ClientPhotoType) -> str:
-        return f"client-photo:{user_id}:{photo_type.value}"
-
-    def _build_provider_file_url(self, photo: ClientPhoto) -> str:
-        base_url = self.image_storage_service.settings.public_base_url.rstrip("/")
-        if not base_url:
-            raise RuntimeError(
-                "PUBLIC_BASE_URL is required to expose client photos to Higgsfield when S3 storage is not configured"
-            )
-
-        photo_type = ClientPhotoType(photo.photo_type)
-        expires_at = self.image_storage_service.build_signed_media_expires_at()
-        token = self.image_storage_service.build_signed_media_token(
-            subject=self._build_provider_subject(photo.user_id, photo_type),
-            expires_at=expires_at,
-        )
-        return (
-            f"{base_url}/clients/{photo.user_id}/photos/{photo_type.value}/provider-file"
-            f"?expires_at={expires_at}&token={token}"
-        )
-
     @staticmethod
     def _sort_photos(photos: Iterable[ClientPhoto]) -> list[ClientPhoto]:
         return sorted(
@@ -226,24 +205,11 @@ class ClientPhotoService:
         file_name = self.image_storage_service.extract_file_name(photo.file_name) or f"{photo_type.value}.jpg"
         return content, content_type, file_name
 
-    def can_access_provider_file(
-        self,
-        user_id: int,
-        photo_type: ClientPhotoType,
-        expires_at: int,
-        token: str | None,
-    ) -> bool:
-        return self.image_storage_service.verify_signed_media_token(
-            subject=self._build_provider_subject(user_id, photo_type),
-            expires_at=expires_at,
-            token=token,
-        )
-
-    async def get_provider_photo_urls(
+    async def get_provider_photo_payloads(
         self,
         user_id: int,
         selected_photo_types: Iterable[ClientPhotoType | str] | None = None,
-    ) -> list[str]:
+    ) -> list[tuple[str, bytes, str]]:
         photos = self._sort_photos(await self.client_photos_repo.get_one(user_id))
         normalized_selected_photo_types = self._normalize_selected_photo_types(selected_photo_types)
         if normalized_selected_photo_types is not None:
@@ -255,17 +221,16 @@ class ClientPhotoService:
             if not photos:
                 raise ValueError("Selected photos were not found for this user")
 
-        urls: list[str] = []
+        payloads: list[tuple[str, bytes, str]] = []
         for photo in photos:
-            if self.image_storage_service.enabled:
-                urls.append(
-                    await self.image_storage_service.get_client_photo_url(
-                        self._resolve_lookup_key(photo)
-                    )
-                )
-            else:
-                urls.append(self._build_provider_file_url(photo))
-        return urls
+            lookup_key = self._resolve_lookup_key(photo)
+            content, content_type = await self.image_storage_service.get_client_photo_content(lookup_key)
+            file_name = (
+                self.image_storage_service.extract_file_name(photo.file_name)
+                or f"{ClientPhotoType(photo.photo_type).value}.png"
+            )
+            payloads.append((file_name, content, content_type))
+        return payloads
 
     async def get_status(self, user_id: int):
         photos = await self.client_photos_repo.get_one(user_id)
