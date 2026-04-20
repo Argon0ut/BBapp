@@ -34,8 +34,10 @@ class OpenAIImageClient:
         if not image_payloads:
             raise ValueError("At least one reference image is required")
 
+        multi_image = len(image_payloads) > 1
+        field_name = "image[]" if multi_image else "image"
         files = [
-            ("image", (file_name or "reference.png", content, content_type or "image/png"))
+            (field_name, (file_name or "reference.png", content, content_type or "image/png"))
             for file_name, content, content_type in image_payloads
         ]
         data = {
