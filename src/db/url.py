@@ -1,5 +1,10 @@
 import os
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 def get_database_url() -> str:
     raw_url = (os.getenv("DB_URL") or os.getenv("DATABASE_URL") or "").strip().strip("\"'")
