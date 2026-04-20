@@ -5,11 +5,15 @@ from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-DB_URL = os.getenv('DB_URL')
-
+DB_URL = os.getenv('DB_URL') or os.getenv('DATABASE_URL')
 
 if not DB_URL:
     raise ValueError("DB_URL is not set")
+
+if DB_URL.startswith("postgresql://"):
+    DB_URL = DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 
 # 1) Create engine
 # 2) Session
