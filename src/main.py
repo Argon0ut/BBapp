@@ -25,6 +25,11 @@ async def root():
     return {"ok": True, "message": "server is running"}
 
 
+@app.get("/_debug/cors")
+async def debug_cors():
+    return {"cors_allowed_origins": settings.cors_allowed_origins}
+
+
 app.include_router(client_router)
 app.include_router(client_photos_router)
 app.include_router(client_photos_legacy_router)
